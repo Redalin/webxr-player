@@ -142,13 +142,22 @@ document.addEventListener('DOMContentLoaded', () => {
     const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
     const isHttps = window.location.protocol === 'https:';
 
+    // Instant auto-redirect if accessed over http on non-localhost
     if (!isHttps && !isLocalhost) {
-      if (httpsWarningBanner) httpsWarningBanner.style.display = 'block';
+      console.warn("🔒 Auto-redirecting HTTP request to HTTPS for WebXR secure context...");
+      const httpsPort = '8443';
+      const newUrl = `https://${window.location.hostname}:${httpsPort}${window.location.pathname}${window.location.search}`;
+      window.location.replace(newUrl);
+      return;
+    }
+
+    if (!isHttps && !isLocalhost && httpsWarningBanner) {
+      httpsWarningBanner.style.display = 'block';
     }
 
     if (btnSwitchHttps) {
       btnSwitchHttps.addEventListener('click', () => {
-        window.location.href = `https://${window.location.hostname}:8000`;
+        window.location.href = `https://${window.location.hostname}:8443`;
       });
     }
   }

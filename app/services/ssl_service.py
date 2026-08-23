@@ -30,3 +30,4 @@ def generate_self_signed_cert():
         print(f"Warning: Failed to generate SSL cert via OpenSSL: {e}")
 
     return None, None
+

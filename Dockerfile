@@ -19,9 +19,9 @@ COPY . /app/
 RUN mkdir -p /media /app/.thumbnails /app/certs
 
 ENV MEDIA_DIR=/media
-ENV PORT=8000
+ENV HTTP_PORT=8000
+ENV HTTPS_PORT=8443
 
-EXPOSE 8000
+EXPOSE 8000 8443
 
-# Start server using entrypoint script or main runner
 CMD ["python3", "run.py"]

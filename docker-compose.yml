@@ -3,7 +3,8 @@ services:
     build: .
     container_name: webxr_3d_player
     ports:
-      - "8000:8000"
+      - "8000:8000"  # HTTP Auto-Redirect Port
+      - "8443:8443"  # HTTPS WebXR Streaming Port
     volumes:
       # Default media directory mounted inside container
       - ./media:/media
@@ -11,5 +12,6 @@ services:
       # - /path/to/your/videos:/media/videos:ro
     environment:
       - MEDIA_DIR=/media
+      - HTTP_PORT=8000
+      - HTTPS_PORT=8443
     restart: unless-stopped
-
