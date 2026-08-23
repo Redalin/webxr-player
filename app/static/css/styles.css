@@ -517,24 +517,111 @@ body {
   width: 100%;
 }
 
-.player-options-bar {
-  padding: 1rem 1.5rem;
-  background: var(--bg-card);
+.btn-danger {
+  background: #dc2626;
+  color: white;
+}
+.btn-danger:hover {
+  background: #b91c1c;
+}
+
+/* Video Wrapper & Popup Control Bar Overlay */
+.video-wrapper {
+  position: relative;
+  cursor: pointer;
+}
+
+.overlay-control-bar {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.92), rgba(0, 0, 0, 0.6), transparent);
+  padding: 1.25rem 1.5rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  z-index: 10;
+  transition: opacity 0.3s ease, transform 0.3s ease;
+  pointer-events: auto;
+}
+
+.overlay-control-bar.fade-out {
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(10px);
+}
+
+.overlay-row {
   display: flex;
   align-items: center;
   gap: 1rem;
-  border-top: 1px solid var(--border-color);
+  width: 100%;
 }
-.player-options-bar select {
-  background: var(--bg-dark);
+
+.progress-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.time-label {
+  font-size: 0.85rem;
+  color: var(--text-main);
+  font-family: monospace;
+  min-width: 45px;
+}
+
+.seek-slider {
+  flex: 1;
+  -webkit-appearance: none;
+  appearance: none;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.3);
+  border-radius: 3px;
+  outline: none;
+  cursor: pointer;
+  transition: height 0.15s ease;
+}
+.seek-slider:hover {
+  height: 8px;
+}
+.seek-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--accent-primary);
+  cursor: pointer;
+  box-shadow: 0 0 8px rgba(99, 102, 241, 0.8);
+}
+
+.main-controls-row {
+  justify-content: space-between;
+}
+
+.overlay-mode-group {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+  color: var(--text-main);
+}
+
+.overlay-select {
+  background: rgba(24, 25, 36, 0.9);
   border: 1px solid var(--border-color);
   color: var(--text-main);
-  padding: 0.4rem 0.8rem;
+  padding: 0.35rem 0.65rem;
   border-radius: 6px;
+  font-size: 0.85rem;
 }
-.hint-text {
-  font-size: 0.8rem;
-  color: var(--text-muted);
+
+.overlay-actions-right {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
 }
 
 /* Loading & Empty States */

@@ -78,16 +78,34 @@ class XRVideoPlayer {
     // Setup ambient light
     const ambientLight = new THREE.AmbientLight(0xffffff, 1.2);
     this.scene.add(ambientLight);
+
+    // VR Controllers
+    const controller1 = this.renderer.xr.getController(0);
+    controller1.addEventListener('select', () => this.onVRControllerSelect());
+    this.scene.add(controller1);
+
+    const controller2 = this.renderer.xr.getController(1);
+    controller2.addEventListener('select', () => this.onVRControllerSelect());
+    this.scene.add(controller2);
+  }
+
+  setProjectionMode(newMode) {
+    this.mode3D = newMode;
+    if (this.xrSession && this.scene) {
+      this.setupStereoVideoScene();
+    }
   }
 
   setupStereoVideoScene() {
     if (!this.videoElement) return;
 
-    // Create Video Texture
-    this.videoTexture = new THREE.VideoTexture(this.videoElement);
-    this.videoTexture.minFilter = THREE.LinearFilter;
-    this.videoTexture.magFilter = THREE.LinearFilter;
-    this.videoTexture.format = THREE.RGBAFormat;
+    // Create Video Texture if not present
+    if (!this.videoTexture) {
+      this.videoTexture = new THREE.VideoTexture(this.videoElement);
+      this.videoTexture.minFilter = THREE.LinearFilter;
+      this.videoTexture.magFilter = THREE.LinearFilter;
+      this.videoTexture.format = THREE.RGBAFormat;
+    }
 
     // Remove old meshes if any
     if (this.leftMesh) this.scene.remove(this.leftMesh);
@@ -172,6 +190,16 @@ class XRVideoPlayer {
     this.scene.add(this.rightMesh);
   }
 
+  onVRControllerSelect() {
+    if (this.videoElement) {
+      if (this.videoElement.paused) {
+        this.videoElement.play();
+      } else {
+        this.videoElement.pause();
+      }
+    }
+  }
+
   renderVR(time, frame) {
     if (this.videoTexture) {
       this.videoTexture.needsUpdate = true;
@@ -200,4 +228,3 @@ class XRVideoPlayer {
 
 // Global Singleton for WebXR Player
 window.xrPlayer = new XRVideoPlayer();
-

@@ -1,7 +1,7 @@
 services:
   webxr-player:
     build: .
-    container_name: webxr_3d_player
+    container_name: 3dPlayer
     ports:
       - "8000:8000"  # HTTP Auto-Redirect Port
       - "8443:8443"  # HTTPS WebXR Streaming Port

@@ -140,7 +140,41 @@
         </div>
       </div>
       <div class="video-wrapper" id="video-wrapper">
-        <video id="web-video-element" controls crossorigin="anonymous" playsinline></video>
+        <video id="web-video-element" crossorigin="anonymous" playsinline></video>
+        
+        <!-- Popup Play Control Bar Overlay (Pops up on cursor click in Fullscreen/Video mode) -->
+        <div id="fullscreen-overlay-bar" class="overlay-control-bar fade-out">
+          <div class="overlay-row progress-row">
+            <span id="overlay-time-current" class="time-label">00:00</span>
+            <input type="range" id="overlay-seek-bar" class="seek-slider" min="0" max="100" value="0" step="0.1">
+            <span id="overlay-time-total" class="time-label">00:00</span>
+          </div>
+          <div class="overlay-row main-controls-row">
+            <button id="overlay-btn-play" class="btn btn-primary btn-play-pause" title="Play / Pause">
+              <span id="overlay-play-icon">▶</span> <span id="overlay-play-text">Play</span>
+            </button>
+            
+            <div class="overlay-mode-group">
+              <label for="overlay-mode-select">3D Projection:</label>
+              <select id="overlay-mode-select" class="overlay-select">
+                <option value="2d">2D Flat Screen</option>
+                <option value="3d_sbs">3D Side-by-Side (SBS)</option>
+                <option value="3d_tb">3D Top-Bottom (TB)</option>
+                <option value="3d_180_sbs">3D 180° VR</option>
+                <option value="3d_360_sbs">3D 360° VR</option>
+              </select>
+            </div>
+
+            <div class="overlay-actions-right">
+              <button id="overlay-btn-exit-vr" class="btn btn-secondary" title="Exit Fullscreen / VR Mode">
+                🥽 Exit VR / Fullscreen
+              </button>
+              <button id="overlay-btn-exit-video" class="btn btn-danger" title="Close Video Player">
+                ✖ Exit Video
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
       <div class="player-options-bar">
         <label for="player-mode-select">3D Projection Format:</label>

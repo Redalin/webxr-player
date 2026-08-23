@@ -22,7 +22,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const modalParentBtn = document.getElementById('modal-parent-btn');
   const modalSelectBtn = document.getElementById('modal-select-btn');
 
-  // Player Elements
+  // Player & Overlay Elements
   const playerModal = document.getElementById('player-modal');
   const btnClosePlayer = document.getElementById('btn-close-player');
   const playerTitle = document.getElementById('player-title');
@@ -33,12 +33,26 @@ document.addEventListener('DOMContentLoaded', () => {
   const videoWrapper = document.getElementById('video-wrapper');
   const playerModeSelect = document.getElementById('player-mode-select');
 
+  // Overlay Controls
+  const fullscreenOverlayBar = document.getElementById('fullscreen-overlay-bar');
+  const overlayBtnPlay = document.getElementById('overlay-btn-play');
+  const overlayPlayIcon = document.getElementById('overlay-play-icon');
+  const overlayPlayText = document.getElementById('overlay-play-text');
+  const overlaySeekBar = document.getElementById('overlay-seek-bar');
+  const overlayTimeCurrent = document.getElementById('overlay-time-current');
+  const overlayTimeTotal = document.getElementById('overlay-time-total');
+  const overlayModeSelect = document.getElementById('overlay-mode-select');
+  const overlayBtnExitVr = document.getElementById('overlay-btn-exit-vr');
+  const overlayBtnExitVideo = document.getElementById('overlay-btn-exit-video');
+
   // State
   let currentPath = '/media';
   let modalCurrentPath = '/media';
   let loadedVideos = [];
   let localVideoFiles = [];
   let currentPlayingVideo = null;
+  let autoHideTimer = null;
+  let isSeeking = false;
 
   // Check Secure Context (HTTPS or localhost required for WebXR API)
   checkSecureContext();
@@ -112,8 +126,8 @@ document.addEventListener('DOMContentLoaded', () => {
   btnEnterWebXR.addEventListener('click', () => {
     const selectedMode = playerModeSelect.value;
     if (!window.isSecureContext) {
-      if (confirm("WebXR requires HTTPS context! Switch to https://" + window.location.hostname + ":8000 now?")) {
-        window.location.href = `https://${window.location.hostname}:8000`;
+      if (confirm("WebXR requires HTTPS context! Switch to https://" + window.location.hostname + ":8443 now?")) {
+        window.location.href = `https://${window.location.hostname}:8443`;
       }
       return;
     }
@@ -122,27 +136,146 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  // Fullscreen 3D Playback for 3D/AR Glasses (XREAL / Rokid / Viture / 3D TVs)
+  // Fullscreen 3D Playback for 3D/AR Glasses
   btnEnterFullscreen3D.addEventListener('click', () => {
     if (videoWrapper.requestFullscreen) {
       videoWrapper.requestFullscreen();
     } else if (videoWrapper.webkitRequestFullscreen) {
       videoWrapper.webkitRequestFullscreen();
     }
+    showOverlayBar();
+  });
+
+  // ------------------------------------------------------------------
+  // Interactive Popup Control Bar Logic (Cursor Click in Fullscreen/Player)
+  // ------------------------------------------------------------------
+  videoWrapper.addEventListener('click', (e) => {
+    // If click was inside overlay control bar controls, don't toggle
+    if (e.target.closest('.overlay-control-bar')) return;
+    
+    if (fullscreenOverlayBar.classList.contains('fade-out')) {
+      showOverlayBar();
+    } else {
+      hideOverlayBar();
+    }
+  });
+
+  videoWrapper.addEventListener('mousemove', () => {
+    showOverlayBar();
+  });
+
+  function showOverlayBar() {
+    fullscreenOverlayBar.classList.remove('fade-out');
+    clearTimeout(autoHideTimer);
+    autoHideTimer = setTimeout(() => {
+      if (!webVideoElement.paused && !isSeeking) {
+        hideOverlayBar();
+      }
+    }, 4000);
+  }
+
+  function hideOverlayBar() {
+    fullscreenOverlayBar.classList.add('fade-out');
+  }
+
+  // Play / Pause Toggle
+  overlayBtnPlay.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (webVideoElement.paused) {
+      webVideoElement.play();
+    } else {
+      webVideoElement.pause();
+    }
+  });
+
+  webVideoElement.addEventListener('play', () => {
+    overlayPlayIcon.textContent = '⏸';
+    overlayPlayText.textContent = 'Pause';
+  });
+
+  webVideoElement.addEventListener('pause', () => {
+    overlayPlayIcon.textContent = '▶';
+    overlayPlayText.textContent = 'Play';
+    showOverlayBar();
+  });
+
+  // Video Progress & Seek
+  webVideoElement.addEventListener('timeupdate', () => {
+    if (!isSeeking && webVideoElement.duration) {
+      const pct = (webVideoElement.currentTime / webVideoElement.duration) * 100;
+      overlaySeekBar.value = pct;
+      overlayTimeCurrent.textContent = formatTime(webVideoElement.currentTime);
+      overlayTimeTotal.textContent = formatTime(webVideoElement.duration);
+    }
+  });
+
+  overlaySeekBar.addEventListener('mousedown', () => { isSeeking = true; });
+  overlaySeekBar.addEventListener('touchstart', () => { isSeeking = true; });
+  
+  overlaySeekBar.addEventListener('input', (e) => {
+    e.stopPropagation();
+    if (webVideoElement.duration) {
+      const targetTime = (e.target.value / 100) * webVideoElement.duration;
+      overlayTimeCurrent.textContent = formatTime(targetTime);
+    }
+  });
+
+  overlaySeekBar.addEventListener('change', (e) => {
+    e.stopPropagation();
+    if (webVideoElement.duration) {
+      webVideoElement.currentTime = (e.target.value / 100) * webVideoElement.duration;
+    }
+    isSeeking = false;
+  });
+
+  // Dynamic 3D Projection Selection
+  overlayModeSelect.addEventListener('change', (e) => {
+    e.stopPropagation();
+    const newMode = e.target.value;
+    playerModeSelect.value = newMode;
+    if (currentPlayingVideo) {
+      currentPlayingVideo.mode_3d = newMode;
+      updatePlayerBadge(newMode);
+    }
+    if (window.xrPlayer) {
+      window.xrPlayer.setProjectionMode(newMode);
+    }
   });
 
   playerModeSelect.addEventListener('change', (e) => {
+    const newMode = e.target.value;
+    overlayModeSelect.value = newMode;
     if (currentPlayingVideo) {
-      currentPlayingVideo.mode_3d = e.target.value;
-      updatePlayerBadge(e.target.value);
+      currentPlayingVideo.mode_3d = newMode;
+      updatePlayerBadge(newMode);
     }
+    if (window.xrPlayer) {
+      window.xrPlayer.setProjectionMode(newMode);
+    }
+  });
+
+  // Exit VR / Fullscreen
+  overlayBtnExitVr.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (document.fullscreenElement) {
+      document.exitFullscreen();
+    }
+    if (window.xrPlayer) {
+      window.xrPlayer.exitVR();
+    }
+    showOverlayBar();
+  });
+
+  // Exit Video completely
+  overlayBtnExitVideo.addEventListener('click', (e) => {
+    e.stopPropagation();
+    closePlayerModal();
   });
 
   function checkSecureContext() {
     const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
     const isHttps = window.location.protocol === 'https:';
 
-    // Instant auto-redirect if accessed over http on non-localhost
     if (!isHttps && !isLocalhost) {
       console.warn("🔒 Auto-redirecting HTTP request to HTTPS for WebXR secure context...");
       const httpsPort = '8443';
@@ -165,7 +298,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // API Call Functions
   async function loadDirectory(path) {
     showLoading(true);
-    localVideoFiles = []; // Reset local files on server dir change
+    localVideoFiles = [];
 
     try {
       const data = await fetchBrowseData(path);
@@ -328,6 +461,7 @@ document.addEventListener('DOMContentLoaded', () => {
     currentPlayingVideo = video;
     playerTitle.textContent = video.name;
     playerModeSelect.value = video.mode_3d;
+    overlayModeSelect.value = video.mode_3d;
     updatePlayerBadge(video.mode_3d);
 
     const streamUrl = video.isLocal
@@ -336,6 +470,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     webVideoElement.src = streamUrl;
     playerModal.classList.add('active');
+    showOverlayBar();
     webVideoElement.play().catch(e => console.log("Autoplay prevented:", e));
   }
 
@@ -344,6 +479,7 @@ document.addEventListener('DOMContentLoaded', () => {
     webVideoElement.src = '';
     playerModal.classList.remove('active');
     currentPlayingVideo = null;
+    hideOverlayBar();
     if (window.xrPlayer) {
       window.xrPlayer.exitVR();
     }
@@ -371,6 +507,14 @@ document.addEventListener('DOMContentLoaded', () => {
     if (f.includes('sbs') || f.includes('3d')) return '3d_sbs';
     if (f.includes('tb') || f.includes('ou')) return '3d_tb';
     return '2d';
+  }
+
+  function formatTime(seconds) {
+    if (isNaN(seconds)) return "00:00";
+    const secs = Math.floor(seconds);
+    const m = Math.floor(secs / 60);
+    const s = secs % 60;
+    return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
   }
 
   function formatBytes(bytes) {
