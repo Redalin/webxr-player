@@ -1,0 +1,15 @@
+services:
+  webxr-player:
+    build: .
+    container_name: webxr_3d_player
+    ports:
+      - "8000:8000"
+    volumes:
+      # Default media directory mounted inside container
+      - ./media:/media
+      # You can mount additional directories from host system here, e.g.:
+      # - /path/to/your/videos:/media/videos:ro
+    environment:
+      - MEDIA_DIR=/media
+    restart: unless-stopped
+

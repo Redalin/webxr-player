@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WebXR 3D Video Streamer</title>
+  <link rel="stylesheet" href="/static/css/styles.css">
+  <!-- Include Three.js for 3D WebXR rendering -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+
+  <!-- Top Header Navigation & File/Directory Picker -->
+  <header class="app-header">
+    <div class="logo">
+      <svg class="logo-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+        <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
+        <line x1="12" y1="22.08" x2="12" y2="12"></line>
+      </svg>
+      <h1>WebXR <span>3D Media Hub</span></h1>
+    </div>
+
+    <!-- Server Filesystem Picker Bar -->
+    <div class="filesystem-picker">
+      <div class="path-input-group">
+        <span class="input-icon">📁</span>
+        <input type="text" id="server-path-input" placeholder="/media or server directory path..." value="/media">
+        <button id="btn-browse-fs" class="btn btn-secondary" title="Browse Server Filesystem">
+          📂 Browse Server
+        </button>
+        <button id="btn-load-path" class="btn btn-primary" title="Scan & Load Path">
+          🔄 Scan Directory
+        </button>
+      </div>
+
+      <!-- Optional Client Local File Picker fallback -->
+      <div class="client-file-picker">
+        <label for="local-file-input" class="btn btn-outline">
+          💻 Open Local File
+        </label>
+        <input type="file" id="local-file-input" accept="video/*" multiple style="display: none;">
+      </div>
+    </div>
+  </header>
+
+  <!-- Secure Context / HTTPS Warning Banner (Shown if accessed over HTTP) -->
+  <div id="https-warning-banner" class="warning-banner" style="display: none;">
+    <div class="warning-content">
+      <span class="warning-icon">🔒</span>
+      <div>
+        <strong>WebXR Requires Secure Context (HTTPS or localhost):</strong>
+        You are currently connected via unencrypted <code>http://</code>. VR browsers (Meta Quest, Apple Vision Pro, Pico) disable the WebXR API on insecure HTTP origins.
+      </div>
+      <button id="btn-switch-https" class="btn btn-primary">
+        🔐 Switch to HTTPS
+      </button>
+    </div>
+  </div>
+
+  <!-- Main Media Dashboard -->
+  <main class="container">
+
+    <!-- Directory Location Breadcrumb & Search Bar -->
+    <div class="location-bar">
+      <div class="breadcrumb" id="path-breadcrumb">
+        <span>Path:</span> <code id="current-path-label">/media</code>
+      </div>
+      <div class="search-filter">
+        <input type="text" id="video-search-input" placeholder="Search videos in directory...">
+        <select id="filter-3d-mode">
+          <option value="all">All Formats</option>
+          <option value="3d">3D Videos Only</option>
+          <option value="2d">2D Videos Only</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Quick Folder Shortcuts -->
+    <div class="preset-folders" id="preset-folders">
+      <span class="preset-label">Quick Locations:</span>
+      <button class="preset-chip" data-path="/media">/media</button>
+      <button class="preset-chip" data-path="/media/videos">/media/videos</button>
+      <button class="preset-chip" data-path="/app">/app</button>
+    </div>
+
+    <!-- Thumbnails & Video Grid -->
+    <section class="video-grid" id="video-grid">
+      <div class="loading-spinner" id="loading-spinner">
+        <div class="spinner"></div>
+        <p>Scanning directory & extracting video metadata...</p>
+      </div>
+      <div class="empty-state" id="empty-state" style="display: none;">
+        <svg viewBox="0 0 24 24" width="64" height="64" stroke="currentColor" stroke-width="1.5" fill="none">
+          <rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"></rect>
+          <line x1="7" y1="2" x2="7" y2="22"></line>
+          <line x1="17" y1="2" x2="17" y2="22"></line>
+          <line x1="2" y1="12" x2="22" y2="12"></line>
+        </svg>
+        <h3>No Video Files Found</h3>
+        <p>Select a different directory path above or mount video folders in Docker.</p>
+      </div>
+    </section>
+  </main>
+
+  <!-- Server Filesystem Browser Modal -->
+  <div class="modal" id="fs-modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>Select Server Directory</h2>
+        <button class="btn-close" id="modal-close-btn">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="modal-current-path" id="modal-path-display">/media</div>
+        <div class="directory-list" id="directory-list">
+          <!-- Dynamically populated folder list -->
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" id="modal-parent-btn">⬆ Up Level</button>
+        <button class="btn btn-primary" id="modal-select-btn">Select This Directory</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Video Player Modal Overlay -->
+  <div class="player-modal" id="player-modal">
+    <div class="player-container">
+      <div class="player-header">
+        <div class="player-title" id="player-title">Video Title</div>
+        <div class="player-controls-top">
+          <span class="badge badge-3d" id="player-3d-badge">3D SBS</span>
+          <button id="btn-enter-fullscreen-3d" class="btn btn-secondary" title="Fullscreen SBS/Stereo playback for 3D Glasses (XREAL/Viture/Rokid/3D TV)">
+            📺 FULLSCREEN 3D
+          </button>
+          <button id="btn-enter-webxr" class="btn btn-xr" title="Enter WebXR VR Immersive Mode">
+            🥽 ENTER WEBXR (VR 3D)
+          </button>
+          <button id="btn-close-player" class="btn-close">&times;</button>
+        </div>
+      </div>
+      <div class="video-wrapper" id="video-wrapper">
+        <video id="web-video-element" controls crossorigin="anonymous" playsinline></video>
+      </div>
+      <div class="player-options-bar">
+        <label for="player-mode-select">3D Projection Format:</label>
+        <select id="player-mode-select">
+          <option value="2d">2D Flat Screen</option>
+          <option value="3d_sbs">3D Side-by-Side (SBS)</option>
+          <option value="3d_tb">3D Top-Bottom / Over-Under (TB)</option>
+          <option value="3d_180_sbs">3D 180° VR Hemisphere</option>
+          <option value="3d_360_sbs">3D 360° VR Sphere</option>
+        </select>
+        <span class="hint-text">Select 3D mode. For Meta Quest / Vision Pro use WebXR. For XREAL/Rokid/Viture glasses use Fullscreen 3D.</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- WebXR Canvas Container (Hidden by default, used when in VR mode) -->
+  <div id="xr-canvas-container" style="display: none;"></div>
+
+  <!-- Scripts -->
+  <script src="/static/js/xr-player.js"></script>
+  <script src="/static/js/app.js"></script>
+</body>
+</html>
