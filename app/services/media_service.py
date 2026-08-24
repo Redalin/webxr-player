@@ -156,14 +156,18 @@ class MediaService:
         """
         Streams video/audio using FFmpeg outputting fragmented MP4 directly to stdout pipe.
         Fast, on-the-fly transcoding and container remuxing for MKV, AVI, AC3, DTS, MPEG4 files.
-        Supports fast input seeking using start_time (-ss).
+        Includes A/V synchronization flags (-avoid_negative_ts make_zero, aresample=async=1000) to prevent audio drift.
         """
         needs_transcode, copy_video, copy_audio = MediaService.should_transcode(video_path)
 
         cmd = ["ffmpeg", "-loglevel", "error"]
         if start_time > 0:
             cmd.extend(["-ss", str(start_time)])
-        cmd.extend(["-i", video_path])
+
+        cmd.extend([
+            "-i", video_path,
+            "-avoid_negative_ts", "make_zero"
+        ])
 
         if copy_video:
             cmd.extend(["-c:v", "copy"])
@@ -174,11 +178,12 @@ class MediaService:
         if copy_audio:
             cmd.extend(["-c:a", "copy"])
         else:
-            # Transcode audio to AAC 192k for universal web browser audio support
-            cmd.extend(["-c:a", "aac", "-b:a", "192k", "-ac", "2"])
+            # Transcode audio to AAC 192k with async resampling for strict A/V sync
+            cmd.extend(["-c:a", "aac", "-b:a", "192k", "-ac", "2", "-af", "aresample=async=1000"])
 
-        # Output fragmented MP4 directly to stdout pipe
+        # Output fragmented MP4 directly to stdout pipe with max muxing queue size
         cmd.extend([
+            "-max_muxing_queue_size", "1024",
             "-f", "mp4",
             "-movflags", "frag_keyframe+empty_moov+default_base_moof",
             "pipe:1"
