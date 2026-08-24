@@ -27,6 +27,7 @@ This will auto-redirect to `https://localhost:8443` using a self-signed certific
 
 ### 2. Mounting Host Video Folders
 By default, `./media` is mounted to `/media` inside the container. To mount your host video library (e.g. `/home/user/Videos` or `/mnt/storage`), update `docker-compose.yml`:
+By default, the host video directory defaults to `/media/vrfiles`. To deploy in other environments with a custom video directory (e.g. `/home/user/Videos` or `/mnt/storage`), set the `HOST_MEDIA_DIR` environment variable or create a `.env` file:
 
 ```yaml
 services:
@@ -36,6 +37,12 @@ services:
       - "8000:8000"
     volumes:
       - /path/to/your/host/videos:/media:ro
+```bash
+# Set environment variable inline:
+HOST_MEDIA_DIR=/home/user/Videos docker compose up -d --build
+
+# Or copy .env.example to .env and edit HOST_MEDIA_DIR:
+cp .env.example .env
 ```
 
 ---

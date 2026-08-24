@@ -3,13 +3,14 @@ services:
     build: .
     container_name: 3dPlayer
     ports:
-      - "8000:8000"  # HTTP Auto-Redirect Port
-      - "8443:8443"  # HTTPS WebXR Streaming Port
+      - "${HTTP_PORT:-8000}:8000"   # HTTP Auto-Redirect Port
+      - "${HTTPS_PORT:-8443}:8443" # HTTPS WebXR Streaming Port
     volumes:
-      # Default media directory mounted inside container (accessible at both /media and /app/media)
-      - /media/vrfiles:/media:z
+      # Host media directory volume mount (configured via HOST_MEDIA_DIR, default: /media/vrfiles)
+      - ${HOST_MEDIA_DIR:-/media/vrfiles}:/media:z
+      - ${HOST_MEDIA_DIR:-/media/vrfiles}:/app/media:z
     environment:
       - MEDIA_DIR=/media
-      - HTTP_PORT=8000
-      - HTTPS_PORT=8443
+      - HTTP_PORT=${HTTP_PORT:-8000}
+      - HTTPS_PORT=${HTTPS_PORT:-8443}
     restart: unless-stopped
