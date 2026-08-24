@@ -184,12 +184,16 @@ class XRVideoPlayer {
     let geometryLeft, geometryRight;
 
     if (mode === '3d_180_sbs') {
-      geometryLeft = new THREE.SphereGeometry(10, 60, 40, Math.PI / 2, Math.PI, 0, Math.PI);
+      // 180° VR Hemisphere centered facing forward (-Z axis by default)
+      geometryLeft = new THREE.SphereGeometry(10, 60, 40, 0, Math.PI, 0, Math.PI);
       geometryLeft.scale(-1, 1, 1);
+      geometryLeft.rotateY(Math.PI);
       geometryRight = geometryLeft.clone();
     } else if (mode === '3d_360_sbs') {
+      // 360° VR Sphere centered facing forward (-Z axis by default)
       geometryLeft = new THREE.SphereGeometry(10, 60, 40, 0, Math.PI * 2, 0, Math.PI);
       geometryLeft.scale(-1, 1, 1);
+      geometryLeft.rotateY(Math.PI);
       geometryRight = geometryLeft.clone();
     } else {
       geometryLeft = new THREE.PlaneGeometry(4, 2.25, 32, 16);
@@ -630,17 +634,30 @@ class XRVideoPlayer {
     headDir.y = 0;
     headDir.normalize();
 
-    // 1. Position video screen 3 meters ahead at eye level
-    const videoPos = headPos.clone().add(headDir.clone().multiplyScalar(3.0));
-    videoPos.y = headPos.y;
+    if (this.mode3D === '3d_180_sbs' || this.mode3D === '3d_360_sbs') {
+      // 180° / 360° VR Mode: Position sphere centered around head and rotate Y to match gaze
+      const yawAngle = Math.atan2(headDir.x, headDir.z) + Math.PI;
+      if (this.leftMesh) {
+        this.leftMesh.position.copy(headPos);
+        this.leftMesh.rotation.set(0, yawAngle, 0);
+      }
+      if (this.rightMesh) {
+        this.rightMesh.position.copy(headPos);
+        this.rightMesh.rotation.set(0, yawAngle, 0);
+      }
+    } else {
+      // 2D / 3D Flat Cinema Mode: Position video screen 3 meters ahead at eye level
+      const videoPos = headPos.clone().add(headDir.clone().multiplyScalar(3.0));
+      videoPos.y = headPos.y;
 
-    if (this.leftMesh) {
-      this.leftMesh.position.copy(videoPos);
-      this.leftMesh.lookAt(headPos.x, videoPos.y, headPos.z);
-    }
-    if (this.rightMesh) {
-      this.rightMesh.position.copy(videoPos);
-      this.rightMesh.lookAt(headPos.x, videoPos.y, headPos.z);
+      if (this.leftMesh) {
+        this.leftMesh.position.copy(videoPos);
+        this.leftMesh.lookAt(headPos.x, videoPos.y, headPos.z);
+      }
+      if (this.rightMesh) {
+        this.rightMesh.position.copy(videoPos);
+        this.rightMesh.lookAt(headPos.x, videoPos.y, headPos.z);
+      }
     }
 
     // 2. Position HUD panel 1.8 meters ahead slightly below eye level
