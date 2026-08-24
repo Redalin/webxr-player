@@ -344,9 +344,9 @@ class XRVideoPlayer {
     ctx.textAlign = 'left';
 
     // Video Progress Bar Track
-    const currentTime = this.videoElement ? this.videoElement.currentTime : 0;
-    const duration = (this.videoElement && this.videoElement.duration) ? this.videoElement.duration : 1;
-    const progressPct = Math.min(1, currentTime / duration);
+    const currentTime = window.getCurrentTime ? window.getCurrentTime() : (this.videoElement ? this.videoElement.currentTime : 0);
+    const duration = window.getTotalDuration ? window.getTotalDuration() : ((this.videoElement && this.videoElement.duration) ? this.videoElement.duration : 1);
+    const progressPct = duration > 0 ? Math.min(1, Math.max(0, currentTime / duration)) : 0;
 
     const isSeekHover = (this.currentHoveredButton === 'seek_bar');
     ctx.fillStyle = isSeekHover ? '#3f4260' : '#2e3046';
@@ -363,33 +363,49 @@ class XRVideoPlayer {
     ctx.font = '22px monospace';
     ctx.fillText(`${this.formatTime(currentTime)} / ${this.formatTime(duration)}`, 60, 220);
 
-    // 3. Play/Pause Button [x: 60..240, y: 260..350]
+    // 3. Rewind -30s Button [x: 60..150, y: 260..350]
+    const isSkipBackHover = (this.currentHoveredButton === 'skip_back_btn');
+    ctx.fillStyle = isSkipBackHover ? '#4b5563' : '#374151';
+    this.drawRoundedRect(ctx, 60, 260, 90, 90, 14, true, isSkipBackHover, '#9ca3af');
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 19px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('⏪-30s', 105, 314);
+
+    // Play/Pause Button [x: 165..315, y: 260..350]
     const isPaused = this.videoElement ? this.videoElement.paused : true;
     const isPlayHover = (this.currentHoveredButton === 'play_btn');
     ctx.fillStyle = isPlayHover ? '#4f46e5' : (isPaused ? '#6366f1' : '#3b82f6');
-    this.drawRoundedRect(ctx, 60, 260, 180, 90, 16, true, isPlayHover, '#c7d2fe');
+    this.drawRoundedRect(ctx, 165, 260, 150, 90, 16, true, isPlayHover, '#c7d2fe');
     ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 24px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText(isPaused ? '▶ PLAY' : '⏸ PAUSE', 150, 314);
+    ctx.font = 'bold 22px sans-serif';
+    ctx.fillText(isPaused ? '▶ PLAY' : '⏸ PAUSE', 240, 314);
 
-    // 4. 3D Format Buttons
+    // Fast-Forward +30s Button [x: 330..420, y: 260..350]
+    const isSkipFwdHover = (this.currentHoveredButton === 'skip_forward_btn');
+    ctx.fillStyle = isSkipFwdHover ? '#4b5563' : '#374151';
+    this.drawRoundedRect(ctx, 330, 260, 90, 90, 14, true, isSkipFwdHover, '#9ca3af');
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 19px sans-serif';
+    ctx.fillText('⏩+30s', 375, 314);
+
+    // 4. 3D Format Buttons [x: 440..960, y: 260..350]
     const modes = [
-      { id: '2d', label: '2D Flat', x: 260 },
-      { id: '3d_sbs', label: '3D SBS', x: 400 },
-      { id: '3d_tb', label: '3D TB', x: 540 },
-      { id: '3d_180_sbs', label: '180° VR', x: 680 },
-      { id: '3d_360_sbs', label: '360° VR', x: 820 }
+      { id: '2d', label: '2D Flat', x: 440 },
+      { id: '3d_sbs', label: '3D SBS', x: 546 },
+      { id: '3d_tb', label: '3D TB', x: 652 },
+      { id: '3d_180_sbs', label: '180° VR', x: 758 },
+      { id: '3d_360_sbs', label: '360° VR', x: 864 }
     ];
 
     modes.forEach(m => {
       const isSelected = (this.mode3D === m.id);
       const isHovered = (this.currentHoveredButton === m.id);
       ctx.fillStyle = isHovered ? '#7c3aed' : (isSelected ? '#8b5cf6' : '#26283b');
-      this.drawRoundedRect(ctx, m.x, 260, 120, 90, 14, true, true, isHovered ? '#ec4899' : (isSelected ? '#a78bfa' : '#3f4260'));
+      this.drawRoundedRect(ctx, m.x, 260, 96, 90, 14, true, true, isHovered ? '#ec4899' : (isSelected ? '#a78bfa' : '#3f4260'));
       ctx.fillStyle = '#ffffff';
-      ctx.font = 'bold 19px sans-serif';
-      ctx.fillText(m.label, m.x + 60, 314);
+      ctx.font = 'bold 18px sans-serif';
+      ctx.fillText(m.label, m.x + 48, 314);
     });
 
     // 5. Action Buttons: Mute, Re-Center, Exit VR & Close Video [y: 380..460]
@@ -499,14 +515,16 @@ class XRVideoPlayer {
   getButtonIdAt(x, y) {
     if (x >= 934 && x <= 994 && y >= 35 && y <= 77) return 'close_btn';
     if (x >= 60 && x <= 600 && y >= 35 && y <= 77) return 'drag_bar';
-    if (x >= 60 && x <= 240 && y >= 260 && y <= 350) return 'play_btn';
     if (x >= 60 && x <= 964 && y >= 140 && y <= 230) return 'seek_bar';
     if (y >= 260 && y <= 350) {
-      if (x >= 260 && x <= 380) return '2d';
-      if (x >= 400 && x <= 520) return '3d_sbs';
-      if (x >= 540 && x <= 660) return '3d_tb';
-      if (x >= 680 && x <= 800) return '3d_180_sbs';
-      if (x >= 820 && x <= 940) return '3d_360_sbs';
+      if (x >= 60 && x <= 150) return 'skip_back_btn';
+      if (x >= 165 && x <= 315) return 'play_btn';
+      if (x >= 330 && x <= 420) return 'skip_forward_btn';
+      if (x >= 440 && x <= 536) return '2d';
+      if (x >= 546 && x <= 642) return '3d_sbs';
+      if (x >= 652 && x <= 748) return '3d_tb';
+      if (x >= 758 && x <= 854) return '3d_180_sbs';
+      if (x >= 864 && x <= 960) return '3d_360_sbs';
     }
     if (y >= 380 && y <= 460) {
       if (x >= 60 && x <= 240) return 'mute_btn';
@@ -584,29 +602,47 @@ class XRVideoPlayer {
       else if (x >= 60 && x <= 600 && y >= 35 && y <= 77) {
         return;
       }
-      // 3. Play / Pause Button Click (x: 60..240, y: 260..350)
-      else if (x >= 60 && x <= 240 && y >= 260 && y <= 350) {
+      // 3. Skip Back -30s Click (x: 60..150, y: 260..350)
+      else if (x >= 60 && x <= 150 && y >= 260 && y <= 350) {
+        if (window.seekToTime && window.getCurrentTime) {
+          window.seekToTime(window.getCurrentTime() - 30);
+        }
+      }
+      // 4. Play / Pause Button Click (x: 165..315, y: 260..350)
+      else if (x >= 165 && x <= 315 && y >= 260 && y <= 350) {
         if (this.videoElement) {
           if (this.videoElement.paused) this.videoElement.play();
           else this.videoElement.pause();
         }
       }
-      // 4. Progress / Seek Line Click (x: 60..964, y: 140..230)
-      else if (x >= 60 && x <= 964 && y >= 140 && y <= 230) {
-        if (this.videoElement && this.videoElement.duration) {
-          const pct = (x - 60) / 904;
-          this.videoElement.currentTime = pct * this.videoElement.duration;
+      // 5. Skip Forward +30s Click (x: 330..420, y: 260..350)
+      else if (x >= 330 && x <= 420 && y >= 260 && y <= 350) {
+        if (window.seekToTime && window.getCurrentTime) {
+          window.seekToTime(window.getCurrentTime() + 30);
         }
       }
-      // 5. 3D Mode Format Selection Buttons (y: 260..350)
-      else if (y >= 260 && y <= 350) {
-        if (x >= 260 && x <= 380) this.setProjectionMode('2d');
-        else if (x >= 400 && x <= 520) this.setProjectionMode('3d_sbs');
-        else if (x >= 540 && x <= 660) this.setProjectionMode('3d_tb');
-        else if (x >= 680 && x <= 800) this.setProjectionMode('3d_180_sbs');
-        else if (x >= 820 && x <= 940) this.setProjectionMode('3d_360_sbs');
+      // 6. Progress / Seek Line Click (x: 60..964, y: 140..230)
+      else if (x >= 60 && x <= 964 && y >= 140 && y <= 230) {
+        const total = window.getTotalDuration ? window.getTotalDuration() : (this.videoElement ? this.videoElement.duration : 0);
+        if (total > 0) {
+          const pct = (x - 60) / 904;
+          const targetTime = pct * total;
+          if (window.seekToTime) {
+            window.seekToTime(targetTime);
+          } else if (this.videoElement) {
+            this.videoElement.currentTime = targetTime;
+          }
+        }
       }
-      // 6. Action Buttons (y: 380..460)
+      // 7. 3D Mode Format Selection Buttons (y: 260..350)
+      else if (y >= 260 && y <= 350) {
+        if (x >= 440 && x <= 536) this.setProjectionMode('2d');
+        else if (x >= 546 && x <= 642) this.setProjectionMode('3d_sbs');
+        else if (x >= 652 && x <= 748) this.setProjectionMode('3d_tb');
+        else if (x >= 758 && x <= 854) this.setProjectionMode('3d_180_sbs');
+        else if (x >= 864 && x <= 960) this.setProjectionMode('3d_360_sbs');
+      }
+      // 8. Action Buttons (y: 380..460)
       else if (y >= 380 && y <= 460) {
         if (x >= 60 && x <= 240) {
           if (this.videoElement) this.videoElement.muted = !this.videoElement.muted;

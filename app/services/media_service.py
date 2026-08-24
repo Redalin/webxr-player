@@ -152,14 +152,18 @@ class MediaService:
         return (needs_transcode, copy_video, copy_audio)
 
     @staticmethod
-    def transcode_stream_generator(video_path: str):
+    def transcode_stream_generator(video_path: str, start_time: float = 0.0):
         """
         Streams video/audio using FFmpeg outputting fragmented MP4 directly to stdout pipe.
         Fast, on-the-fly transcoding and container remuxing for MKV, AVI, AC3, DTS, MPEG4 files.
+        Supports fast input seeking using start_time (-ss).
         """
         needs_transcode, copy_video, copy_audio = MediaService.should_transcode(video_path)
 
-        cmd = ["ffmpeg", "-loglevel", "error", "-i", video_path]
+        cmd = ["ffmpeg", "-loglevel", "error"]
+        if start_time > 0:
+            cmd.extend(["-ss", str(start_time)])
+        cmd.extend(["-i", video_path])
 
         if copy_video:
             cmd.extend(["-c:v", "copy"])

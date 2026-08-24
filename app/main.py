@@ -54,21 +54,21 @@ async def get_thumbnail(path: str = Query(...)):
     )
 
 @app.get("/api/stream")
-async def stream_video(request: Request, path: str = Query(...), force_transcode: bool = Query(False)):
+async def stream_video(request: Request, path: str = Query(...), ss: float = Query(0.0), force_transcode: bool = Query(False)):
     if not os.path.exists(path) or not os.path.isfile(path):
         raise HTTPException(status_code=404, detail="Video file not found")
 
     needs_transcode, _, _ = MediaService.should_transcode(path)
 
     # Route incompatible formats (e.g. MKV with AC3/DTS audio, AVI MPEG4, WMV) through FFmpeg on-the-fly streaming
-    if force_transcode or needs_transcode:
+    if force_transcode or needs_transcode or ss > 0:
         headers = {
             "Content-Type": "video/mp4",
             "Accept-Ranges": "none",
             "Cache-Control": "no-cache",
         }
         return StreamingResponse(
-            MediaService.transcode_stream_generator(path),
+            MediaService.transcode_stream_generator(path, start_time=ss),
             media_type="video/mp4",
             headers=headers
         )

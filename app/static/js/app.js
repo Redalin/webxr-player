@@ -47,7 +47,44 @@ document.addEventListener('DOMContentLoaded', () => {
   const overlayTimeTotal = document.getElementById('overlay-time-total');
   const overlayModeSelect = document.getElementById('overlay-mode-select');
   const overlayBtnExitVr = document.getElementById('overlay-btn-exit-vr');
+  const overlayBtnSkipBack = document.getElementById('overlay-btn-skip-back');
+  const overlayBtnSkipForward = document.getElementById('overlay-btn-skip-forward');
   const overlayBtnExitVideo = document.getElementById('overlay-btn-exit-video');
+
+  // State & Video Seek Tracking
+  let currentVideoOffset = 0;
+
+  function getCurrentTime() {
+    return currentVideoOffset + (webVideoElement ? webVideoElement.currentTime : 0);
+  }
+
+  function getTotalDuration() {
+    if (currentPlayingVideo && currentPlayingVideo.duration > 0) {
+      return currentPlayingVideo.duration;
+    }
+    return webVideoElement ? (webVideoElement.duration || 0) : 0;
+  }
+
+  function seekToTime(targetTime) {
+    const total = getTotalDuration();
+    const boundedTarget = Math.max(0, Math.min(total > 0 ? total : 86400, targetTime));
+
+    if (currentPlayingVideo && (currentPlayingVideo.needs_transcode || webVideoElement.duration === Infinity || isNaN(webVideoElement.duration))) {
+      currentVideoOffset = boundedTarget;
+      webVideoElement.src = `/api/stream?path=${encodeURIComponent(currentPlayingVideo.path)}&ss=${boundedTarget}`;
+      webVideoElement.play().catch(e => console.log(e));
+    } else {
+      currentVideoOffset = 0;
+      if (webVideoElement) {
+        webVideoElement.currentTime = boundedTarget;
+      }
+    }
+    showOverlayBar();
+  }
+
+  window.seekToTime = seekToTime;
+  window.getCurrentTime = getCurrentTime;
+  window.getTotalDuration = getTotalDuration;
 
   // State
   let currentPath = '/media';
@@ -285,13 +322,32 @@ document.addEventListener('DOMContentLoaded', () => {
     showOverlayBar();
   });
 
+  // Skip -30s and +30s Buttons
+  if (overlayBtnSkipBack) {
+    overlayBtnSkipBack.addEventListener('click', (e) => {
+      e.stopPropagation();
+      seekToTime(getCurrentTime() - 30);
+    });
+  }
+
+  if (overlayBtnSkipForward) {
+    overlayBtnSkipForward.addEventListener('click', (e) => {
+      e.stopPropagation();
+      seekToTime(getCurrentTime() + 30);
+    });
+  }
+
   // Video Progress & Seek
   webVideoElement.addEventListener('timeupdate', () => {
-    if (!isSeeking && webVideoElement.duration) {
-      const pct = (webVideoElement.currentTime / webVideoElement.duration) * 100;
-      overlaySeekBar.value = pct;
-      overlayTimeCurrent.textContent = formatTime(webVideoElement.currentTime);
-      overlayTimeTotal.textContent = formatTime(webVideoElement.duration);
+    if (!isSeeking) {
+      const current = getCurrentTime();
+      const total = getTotalDuration();
+      if (total > 0) {
+        const pct = (current / total) * 100;
+        overlaySeekBar.value = Math.min(100, Math.max(0, pct));
+        overlayTimeCurrent.textContent = formatTime(current);
+        overlayTimeTotal.textContent = formatTime(total);
+      }
     }
   });
 
@@ -300,16 +356,19 @@ document.addEventListener('DOMContentLoaded', () => {
   
   overlaySeekBar.addEventListener('input', (e) => {
     e.stopPropagation();
-    if (webVideoElement.duration) {
-      const targetTime = (e.target.value / 100) * webVideoElement.duration;
+    const total = getTotalDuration();
+    if (total > 0) {
+      const targetTime = (e.target.value / 100) * total;
       overlayTimeCurrent.textContent = formatTime(targetTime);
     }
   });
 
   overlaySeekBar.addEventListener('change', (e) => {
     e.stopPropagation();
-    if (webVideoElement.duration) {
-      webVideoElement.currentTime = (e.target.value / 100) * webVideoElement.duration;
+    const total = getTotalDuration();
+    if (total > 0) {
+      const targetTime = (e.target.value / 100) * total;
+      seekToTime(targetTime);
     }
     isSeeking = false;
   });
@@ -676,6 +735,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function openPlayerModal(video) {
     currentPlayingVideo = video;
+    currentVideoOffset = 0;
     playerTitle.textContent = video.name;
     playerTitle.title = video.name;
     webVideoElement.title = video.name;
