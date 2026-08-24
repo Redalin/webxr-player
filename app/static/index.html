@@ -27,17 +27,17 @@
         <span class="input-icon">📁</span>
         <input type="text" id="server-path-input" placeholder="/media or server directory path..." value="/media">
         <button id="btn-browse-fs" class="btn btn-secondary" title="Browse Server Filesystem">
-          📂 Browse Server
+          <span class="btn-icon">📂</span><span class="btn-text"> Browse Server</span>
         </button>
         <button id="btn-load-path" class="btn btn-primary" title="Scan & Load Path">
-          🔄 Scan Directory
+          <span class="btn-icon">🔄</span><span class="btn-text"> Scan Directory</span>
         </button>
       </div>
 
       <!-- Optional Client Local File Picker fallback -->
       <div class="client-file-picker">
-        <label for="local-file-input" class="btn btn-outline">
-          💻 Open Local File
+        <label for="local-file-input" class="btn btn-outline" title="Open Local File">
+          <span class="btn-icon">💻</span><span class="btn-text"> Open Local File</span>
         </label>
         <input type="file" id="local-file-input" accept="video/*" multiple style="display: none;">
       </div>
@@ -65,6 +65,7 @@
     <div class="location-bar">
       <div class="breadcrumb" id="path-breadcrumb">
         <span>Path:</span> <code id="current-path-label">/media</code>
+        <button id="btn-toggle-favorite" class="btn-star-icon" title="Save current directory to Quick Locations">⭐</button>
       </div>
       <div class="search-filter">
         <input type="text" id="video-search-input" placeholder="Search videos in directory...">
@@ -77,11 +78,10 @@
     </div>
 
     <!-- Quick Folder Shortcuts -->
-    <div class="preset-folders" id="preset-folders">
-      <span class="preset-label">Quick Locations:</span>
-      <button class="preset-chip" data-path="/media">/media</button>
-      <button class="preset-chip" data-path="/app/media">/app/media</button>
-      <button class="preset-chip" data-path="/app">/app</button>
+    <div class="preset-folders-container">
+      <div class="preset-folders" id="preset-folders">
+        <span class="preset-label">Quick Locations:</span>
+      </div>
     </div>
 
     <!-- Thumbnails & Video Grid -->

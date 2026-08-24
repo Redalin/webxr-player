@@ -50,9 +50,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // State
   let currentPath = '/media';
-  let modalCurrentPath = '/media';
+  let loadedDirectories = [];
   let loadedVideos = [];
   let localVideoFiles = [];
+  let parentDirectory = null;
   let currentPlayingVideo = null;
   let autoHideTimer = null;
   let isSeeking = false;
@@ -76,13 +77,76 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  presetFolders.addEventListener('click', (e) => {
-    if (e.target.classList.contains('preset-chip')) {
-      const path = e.target.getAttribute('data-path');
-      serverPathInput.value = path;
-      loadDirectory(path);
+  // Favorites / Quick Locations
+  let favoritePaths = [];
+  try {
+    const saved = localStorage.getItem('webxr_favorite_folders');
+    favoritePaths = saved ? JSON.parse(saved) : ['/media', '/app/media', '/app'];
+  } catch(e) {
+    favoritePaths = ['/media', '/app/media', '/app'];
+  }
+
+  const btnToggleFavorite = document.getElementById('btn-toggle-favorite');
+
+  function saveFavorites() {
+    try {
+      localStorage.setItem('webxr_favorite_folders', JSON.stringify(favoritePaths));
+    } catch(e) {}
+    renderFavorites();
+    updateFavoriteStar();
+  }
+
+  function updateFavoriteStar() {
+    if (!btnToggleFavorite) return;
+    const isFav = favoritePaths.includes(currentPath);
+    if (isFav) {
+      btnToggleFavorite.classList.add('active');
+      btnToggleFavorite.title = `Remove ${currentPath} from Quick Locations`;
+    } else {
+      btnToggleFavorite.classList.remove('active');
+      btnToggleFavorite.title = `Save ${currentPath} to Quick Locations`;
     }
-  });
+  }
+
+  function renderFavorites() {
+    if (!presetFolders) return;
+    presetFolders.innerHTML = '<span class="preset-label">Quick Locations:</span>';
+    favoritePaths.forEach(path => {
+      const wrapper = document.createElement('div');
+      wrapper.className = 'preset-chip-wrapper';
+      wrapper.innerHTML = `
+        <button class="preset-chip" data-path="${path}" title="${path}">${path}</button>
+        <span class="preset-remove" data-path="${path}" title="Remove ${path}">×</span>
+      `;
+
+      wrapper.querySelector('.preset-chip').addEventListener('click', () => {
+        serverPathInput.value = path;
+        loadDirectory(path);
+      });
+
+      wrapper.querySelector('.preset-remove').addEventListener('click', (e) => {
+        e.stopPropagation();
+        favoritePaths = favoritePaths.filter(p => p !== path);
+        saveFavorites();
+      });
+
+      presetFolders.appendChild(wrapper);
+    });
+  }
+
+  if (btnToggleFavorite) {
+    btnToggleFavorite.addEventListener('click', () => {
+      if (!currentPath) return;
+      if (favoritePaths.includes(currentPath)) {
+        favoritePaths = favoritePaths.filter(p => p !== currentPath);
+      } else {
+        favoritePaths.push(currentPath);
+      }
+      saveFavorites();
+    });
+  }
+
+  renderFavorites();
 
   // Local File Picker
   localFileInput.addEventListener('change', (e) => {
@@ -324,10 +388,13 @@ document.addEventListener('DOMContentLoaded', () => {
     try {
       const data = await fetchBrowseData(path);
       currentPath = data.current;
+      parentDirectory = (data.parent && data.parent !== currentPath) ? data.parent : null;
       serverPathInput.value = currentPath;
       currentPathLabel.textContent = currentPath;
       currentPathLabel.title = currentPath;
+      updateFavoriteStar();
 
+      loadedDirectories = data.directories || [];
       loadedVideos = data.videos || [];
       renderVideoGrid();
     } catch (err) {
@@ -399,9 +466,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const searchQuery = videoSearchInput.value.toLowerCase().trim();
     const filterMode = filter3DMode.value;
 
-    const allVideos = [...localVideoFiles, ...loadedVideos];
+    const filteredDirs = loadedDirectories.filter(dir =>
+      dir.name.toLowerCase().includes(searchQuery)
+    );
 
-    const filtered = allVideos.filter(vid => {
+    const allVideos = [...localVideoFiles, ...loadedVideos];
+    const filteredVideos = allVideos.filter(vid => {
       const matchesSearch = vid.name.toLowerCase().includes(searchQuery);
       let matchesFilter = true;
       if (filterMode === '3d') matchesFilter = vid.mode_3d !== '2d';
@@ -409,17 +479,66 @@ document.addEventListener('DOMContentLoaded', () => {
       return matchesSearch && matchesFilter;
     });
 
-    if (filtered.length === 0) {
+    const hasContent = (parentDirectory && !searchQuery) || filteredDirs.length > 0 || filteredVideos.length > 0;
+
+    if (!hasContent) {
       emptyState.style.display = 'block';
       return;
     }
 
     emptyState.style.display = 'none';
 
-    filtered.forEach(vid => {
-      const card = createVideoCard(vid);
-      videoGrid.appendChild(card);
+    // 1. Render Parent Directory Card (if parent exists and not searching)
+    if (parentDirectory && !searchQuery) {
+      const parentCard = createParentFolderCard(parentDirectory);
+      videoGrid.appendChild(parentCard);
+    }
+
+    // 2. Render Subfolder Cards
+    filteredDirs.forEach(dir => {
+      const folderCard = createFolderCard(dir);
+      videoGrid.appendChild(folderCard);
     });
+
+    // 3. Render Video Cards
+    filteredVideos.forEach(vid => {
+      const videoCard = createVideoCard(vid);
+      videoGrid.appendChild(videoCard);
+    });
+  }
+
+  function createParentFolderCard(parentPath) {
+    const card = document.createElement('div');
+    card.className = 'folder-card parent-folder-card';
+    card.title = `Go up to parent directory: ${parentPath}`;
+    card.innerHTML = `
+      <div class="folder-icon-container">
+        <span class="folder-emoji">⬆️</span>
+      </div>
+      <div class="folder-info">
+        <div class="folder-title">.. (Parent Directory)</div>
+        <span class="folder-badge">${parentPath}</span>
+      </div>
+    `;
+    card.addEventListener('click', () => loadDirectory(parentPath));
+    return card;
+  }
+
+  function createFolderCard(dir) {
+    const card = document.createElement('div');
+    card.className = 'folder-card';
+    card.title = `Open subfolder: ${dir.path}`;
+    card.innerHTML = `
+      <div class="folder-icon-container">
+        <span class="folder-emoji">📁</span>
+      </div>
+      <div class="folder-info">
+        <div class="folder-title" title="${dir.name}">${dir.name}</div>
+        <span class="folder-badge">Subfolder</span>
+      </div>
+    `;
+    card.addEventListener('click', () => loadDirectory(dir.path));
+    return card;
   }
 
   function createVideoCard(video) {
