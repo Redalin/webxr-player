@@ -396,29 +396,61 @@ document.addEventListener('DOMContentLoaded', () => {
     rootSegment.addEventListener('click', () => loadDirectory('/'));
     pathBreadcrumb.appendChild(rootSegment);
 
-    // 2. Path Segments
-    let currentAcc = '';
-    parts.forEach((part, index) => {
-      currentAcc += '/' + part;
-      const targetPath = currentAcc;
-      const isLast = (index === parts.length - 1);
+    // 2. Determine if root-side truncation is needed
+    // Show max 2 tail segments if total parts > 3
+    const maxVisibleTail = 2;
+    const isTruncatedAtRoot = parts.length > 3;
+    const startIndex = isTruncatedAtRoot ? parts.length - maxVisibleTail : 0;
 
-      // Separator /
+    if (isTruncatedAtRoot) {
       const sep = document.createElement('span');
       sep.className = 'breadcrumb-separator';
       sep.textContent = '/';
       pathBreadcrumb.appendChild(sep);
 
-      // Segment Button
+      const hiddenPath = '/' + parts.slice(0, startIndex).join('/');
+      const ellipsisBtn = document.createElement('button');
+      ellipsisBtn.className = 'breadcrumb-segment breadcrumb-ellipsis';
+      ellipsisBtn.title = `Hidden parent directories: ${hiddenPath}`;
+      ellipsisBtn.innerHTML = '<span>...</span>';
+      ellipsisBtn.addEventListener('click', () => loadDirectory(hiddenPath));
+      pathBreadcrumb.appendChild(ellipsisBtn);
+    }
+
+    // 3. Render Visible Tail Path Segments
+    let currentAcc = '/' + parts.slice(0, startIndex).join('/');
+    if (currentAcc === '/') currentAcc = '';
+
+    for (let i = startIndex; i < parts.length; i++) {
+      const part = parts[i];
+      currentAcc += '/' + part;
+      const targetPath = currentAcc;
+      const isLast = (i === parts.length - 1);
+
+      const sep = document.createElement('span');
+      sep.className = 'breadcrumb-separator';
+      sep.textContent = '/';
+      pathBreadcrumb.appendChild(sep);
+
       const segBtn = document.createElement('button');
       segBtn.className = `breadcrumb-segment ${isLast ? 'active' : ''}`;
       segBtn.title = targetPath;
       segBtn.innerHTML = `<span>📁</span> <span>${part}</span>`;
       segBtn.addEventListener('click', () => loadDirectory(targetPath));
       pathBreadcrumb.appendChild(segBtn);
-    });
+    }
 
-    // 3. Append ⭐ Star Favorite Button for current path
+    // 4. Append ⬆️ Up Parent Directory Button at end of breadcrumb trail
+    if (parentDirectory) {
+      const upBtn = document.createElement('button');
+      upBtn.className = 'btn-up-icon';
+      upBtn.title = `Go up to parent directory: ${parentDirectory}`;
+      upBtn.innerHTML = '<span>⬆️</span><span class="btn-text"> Up</span>';
+      upBtn.addEventListener('click', () => loadDirectory(parentDirectory));
+      pathBreadcrumb.appendChild(upBtn);
+    }
+
+    // 5. Append ⭐ Star Favorite Button for current path
     if (btnToggleFavorite) {
       pathBreadcrumb.appendChild(btnToggleFavorite);
     }
@@ -526,7 +558,7 @@ document.addEventListener('DOMContentLoaded', () => {
       return matchesSearch && matchesFilter;
     });
 
-    const hasContent = (parentDirectory && !searchQuery) || filteredDirs.length > 0 || filteredVideos.length > 0;
+    const hasContent = filteredDirs.length > 0 || filteredVideos.length > 0;
 
     if (!hasContent) {
       emptyState.style.display = 'block';
@@ -535,19 +567,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
     emptyState.style.display = 'none';
 
-    // 1. Render Parent Directory Card (if parent exists and not searching)
-    if (parentDirectory && !searchQuery) {
-      const parentCard = createParentFolderCard(parentDirectory);
-      videoGrid.appendChild(parentCard);
-    }
-
-    // 2. Render Subfolder Cards
+    // 1. Render Subfolder Cards
     filteredDirs.forEach(dir => {
       const folderCard = createFolderCard(dir);
       videoGrid.appendChild(folderCard);
     });
 
-    // 3. Render Video Cards
+    // 2. Render Video Cards
     filteredVideos.forEach(vid => {
       const videoCard = createVideoCard(vid);
       videoGrid.appendChild(videoCard);

@@ -254,6 +254,33 @@ body {
   user-select: none;
 }
 
+.breadcrumb-ellipsis {
+  color: var(--text-muted);
+  font-weight: bold;
+}
+
+.btn-up-icon {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  color: var(--text-main);
+  font-size: 0.85rem;
+  padding: 0.2rem 0.6rem;
+  border-radius: 6px;
+  cursor: pointer;
+  margin-left: 0.2rem;
+  transition: all 0.2s ease;
+  line-height: 1.2;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  vertical-align: middle;
+}
+.btn-up-icon:hover {
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+  background: var(--bg-hover);
+}
+
 .search-filter {
   display: flex;
   gap: 0.75rem;
