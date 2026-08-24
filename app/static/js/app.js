@@ -312,13 +312,13 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   webVideoElement.addEventListener('play', () => {
-    overlayPlayIcon.textContent = '⏸';
-    overlayPlayText.textContent = 'Pause';
+    if (overlayPlayIcon) overlayPlayIcon.textContent = '⏸';
+    if (overlayPlayText) overlayPlayText.textContent = 'Pause';
   });
 
   webVideoElement.addEventListener('pause', () => {
-    overlayPlayIcon.textContent = '▶';
-    overlayPlayText.textContent = 'Play';
+    if (overlayPlayIcon) overlayPlayIcon.textContent = '▶';
+    if (overlayPlayText) overlayPlayText.textContent = 'Play';
     showOverlayBar();
   });
 
@@ -374,22 +374,24 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   // Dynamic 3D Projection Selection
-  overlayModeSelect.addEventListener('change', (e) => {
-    e.stopPropagation();
-    const newMode = e.target.value;
-    playerModeSelect.value = newMode;
-    if (currentPlayingVideo) {
-      currentPlayingVideo.mode_3d = newMode;
-      updatePlayerBadge(newMode);
-    }
-    if (window.xrPlayer) {
-      window.xrPlayer.setProjectionMode(newMode);
-    }
-  });
+  if (overlayModeSelect) {
+    overlayModeSelect.addEventListener('change', (e) => {
+      e.stopPropagation();
+      const newMode = e.target.value;
+      playerModeSelect.value = newMode;
+      if (currentPlayingVideo) {
+        currentPlayingVideo.mode_3d = newMode;
+        updatePlayerBadge(newMode);
+      }
+      if (window.xrPlayer) {
+        window.xrPlayer.setProjectionMode(newMode);
+      }
+    });
+  }
 
   playerModeSelect.addEventListener('change', (e) => {
     const newMode = e.target.value;
-    overlayModeSelect.value = newMode;
+    if (overlayModeSelect) overlayModeSelect.value = newMode;
     if (currentPlayingVideo) {
       currentPlayingVideo.mode_3d = newMode;
       updatePlayerBadge(newMode);
@@ -739,8 +741,8 @@ document.addEventListener('DOMContentLoaded', () => {
     playerTitle.textContent = video.name;
     playerTitle.title = video.name;
     webVideoElement.title = video.name;
-    playerModeSelect.value = video.mode_3d;
-    overlayModeSelect.value = video.mode_3d;
+    if (playerModeSelect) playerModeSelect.value = video.mode_3d;
+    if (overlayModeSelect) overlayModeSelect.value = video.mode_3d;
     updatePlayerBadge(video.mode_3d);
 
     const streamUrl = video.isLocal

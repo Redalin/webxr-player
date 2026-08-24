@@ -83,7 +83,7 @@ cp .env.example .env
 1. Ensure your VR headset (Meta Quest 2/3/Pro, Apple Vision Pro, Pico, XREAL, etc.) is connected to the same Wi-Fi network as your server.
 2. Open your headset browser and navigate to `http://<your-server-ip>:8000` (which automatically redirects to `https://<your-server-ip>:8443`).
 3. Accept the self-signed SSL certificate warning in your headset browser.
-4. Browse your video library, choose your 3D projection format (2D, 3D SBS, 3D TB, 180° VR, 360° VR), and click **🥽 ENTER WEBXR**.
+4. Browse your video library, choose your 3D projection format (2D, 3D SBS, 3D TB, 180° VR, 360° VR), and click **🥽 ENTER VR**.
 
 ---
 

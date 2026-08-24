@@ -638,6 +638,40 @@ body {
   gap: 1rem;
 }
 
+.player-controls-top {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+#player-3d-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.4rem 0.75rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  border-radius: 8px;
+  background: var(--bg-dark);
+  border: 1px solid var(--border-color);
+  color: var(--text-main);
+  line-height: 1.2;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  user-select: none;
+}
+
+#player-3d-badge.badge-3d {
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+  background: rgba(99, 102, 241, 0.15);
+}
+
+#player-3d-badge.badge-2d {
+  border-color: var(--border-color);
+  color: var(--text-muted);
+  background: var(--bg-dark);
+}
+
 .btn-close {
   background: transparent;
   border: none;

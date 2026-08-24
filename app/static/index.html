@@ -129,11 +129,11 @@
         <div class="player-title" id="player-title">Video Title</div>
         <div class="player-controls-top">
           <span class="badge badge-3d" id="player-3d-badge">3D SBS</span>
-          <button id="btn-enter-fullscreen-3d" class="btn btn-secondary" title="Fullscreen SBS/Stereo/3D Playback">
-            📺 FULLSCREEN 3D
+          <button id="btn-enter-fullscreen-3d" class="btn btn-secondary" title="Fullscreen 3D">
+            📺 FULLSCREEN
           </button>
           <button id="btn-enter-webxr" class="btn btn-xr" title="Enter Immersive Mode">
-            🥽 ENTER WEBXR (VR 3D)
+            🥽 ENTER VR
           </button>
           <button id="btn-close-player" class="btn-close">&times;</button>
         </div>
@@ -150,29 +150,18 @@
           </div>
           <div class="overlay-row main-controls-row">
             <div class="overlay-playback-group">
+              <button id="overlay-btn-play" class="btn btn-primary btn-play-pause" title="Play / Pause">
+                <span id="overlay-play-icon">▶</span>
+              </button>
+              <button id="overlay-btn-mute" class="btn btn-secondary btn-mute-toggle" title="Mute / Unmute Sound">
+                <span id="overlay-mute-icon">🔊</span>
+              </button>
               <button id="overlay-btn-skip-back" class="btn btn-secondary btn-skip" title="Rewind 30 seconds">
                 ⏪ -30s
-              </button>
-              <button id="overlay-btn-play" class="btn btn-primary btn-play-pause" title="Play / Pause">
-                <span id="overlay-play-icon">▶</span> <span id="overlay-play-text">Play</span>
               </button>
               <button id="overlay-btn-skip-forward" class="btn btn-secondary btn-skip" title="Fast-forward 30 seconds">
                 ⏩ +30s
               </button>
-              <button id="overlay-btn-mute" class="btn btn-secondary btn-mute-toggle" title="Mute / Unmute Sound">
-                <span id="overlay-mute-icon">🔊</span> <span id="overlay-mute-text">Mute</span>
-              </button>
-            </div>
-            
-            <div class="overlay-mode-group">
-              <label for="overlay-mode-select">3D Projection:</label>
-              <select id="overlay-mode-select" class="overlay-select">
-                <option value="2d">2D Flat Screen</option>
-                <option value="3d_sbs">3D Side-by-Side (SBS)</option>
-                <option value="3d_tb">3D Top-Bottom (TB)</option>
-                <option value="3d_180_sbs">3D 180° VR</option>
-                <option value="3d_360_sbs">3D 360° VR</option>
-              </select>
             </div>
 
             <div class="overlay-actions-right">
