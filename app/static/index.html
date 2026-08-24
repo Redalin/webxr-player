@@ -165,26 +165,27 @@
             </div>
 
             <div class="overlay-actions-right">
-              <button id="overlay-btn-exit-vr" class="btn btn-secondary" title="Exit Fullscreen / VR Mode">
-                🥽 Exit VR / Fullscreen
+              <div class="format-menu-wrapper">
+                <button id="overlay-btn-format-menu" class="btn btn-secondary" title="Select 3D Projection Format">
+                  ☰ <span class="btn-text">3D Format</span>
+                </button>
+                <div id="overlay-format-dropdown" class="format-dropdown-menu hidden">
+                  <button class="format-option" data-value="2d">2D Flat Screen</button>
+                  <button class="format-option" data-value="3d_sbs">3D Side-by-Side (SBS)</button>
+                  <button class="format-option" data-value="3d_tb">3D Top-Bottom (TB)</button>
+                  <button class="format-option" data-value="3d_180_sbs">3D 180° VR</button>
+                  <button class="format-option" data-value="3d_360_sbs">3D 360° VR</button>
+                </div>
+              </div>
+              <button id="overlay-btn-exit-vr" class="btn btn-secondary" title="Exit VR">
+                🥽 <span class="btn-text">Exit VR / Fullscreen</span>
               </button>
               <button id="overlay-btn-exit-video" class="btn btn-danger" title="Close Video Player">
-                ✖ Exit Video
+                ✖ <span class="btn-text">Exit Video</span>
               </button>
             </div>
           </div>
         </div>
-      </div>
-      <div class="player-options-bar">
-        <label for="player-mode-select">3D Format:</label>
-        <select id="player-mode-select">
-          <option value="2d">2D Flat Screen</option>
-          <option value="3d_sbs">3D Side-by-Side (SBS)</option>
-          <option value="3d_tb">3D Top-Bottom / Over-Under (TB)</option>
-          <option value="3d_180_sbs">3D 180° VR Hemisphere</option>
-          <option value="3d_360_sbs">3D 360° VR Sphere</option>
-        </select>
-      </div>
     </div>
   </div>
 

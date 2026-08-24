@@ -229,7 +229,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // WebXR Launch
   btnEnterWebXR.addEventListener('click', () => {
-    const selectedMode = playerModeSelect.value;
+    const selectedMode = playerModeSelect ? playerModeSelect.value : (currentPlayingVideo ? currentPlayingVideo.mode_3d : '2d');
     if (!window.isSecureContext) {
       if (confirm("WebXR requires HTTPS context! Switch to https://" + window.location.hostname + ":8443 now?")) {
         window.location.href = `https://${window.location.hostname}:8443`;
@@ -373,12 +373,58 @@ document.addEventListener('DOMContentLoaded', () => {
     isSeeking = false;
   });
 
-  // Dynamic 3D Projection Selection
-  if (overlayModeSelect) {
-    overlayModeSelect.addEventListener('change', (e) => {
+  // Hamburger 3D Projection Selection Menu
+  const overlayBtnFormatMenu = document.getElementById('overlay-btn-format-menu');
+  const overlayFormatDropdown = document.getElementById('overlay-format-dropdown');
+
+  if (overlayBtnFormatMenu && overlayFormatDropdown) {
+    overlayBtnFormatMenu.addEventListener('click', (e) => {
       e.stopPropagation();
+      overlayFormatDropdown.classList.toggle('hidden');
+      updateFormatDropdownActiveState();
+    });
+
+    const formatOptions = overlayFormatDropdown.querySelectorAll('.format-option');
+    formatOptions.forEach(opt => {
+      opt.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const newMode = opt.getAttribute('data-value');
+        if (playerModeSelect) playerModeSelect.value = newMode;
+        if (currentPlayingVideo) {
+          currentPlayingVideo.mode_3d = newMode;
+          updatePlayerBadge(newMode);
+        }
+        if (window.xrPlayer) {
+          window.xrPlayer.setProjectionMode(newMode);
+        }
+        overlayFormatDropdown.classList.add('hidden');
+        updateFormatDropdownActiveState();
+      });
+    });
+
+    document.addEventListener('click', (e) => {
+      if (!e.target.closest('.format-menu-wrapper')) {
+        overlayFormatDropdown.classList.add('hidden');
+      }
+    });
+  }
+
+  function updateFormatDropdownActiveState() {
+    if (!overlayFormatDropdown) return;
+    const currentMode = (currentPlayingVideo ? currentPlayingVideo.mode_3d : '2d');
+    const formatOptions = overlayFormatDropdown.querySelectorAll('.format-option');
+    formatOptions.forEach(opt => {
+      if (opt.getAttribute('data-value') === currentMode) {
+        opt.classList.add('active');
+      } else {
+        opt.classList.remove('active');
+      }
+    });
+  }
+
+  if (playerModeSelect) {
+    playerModeSelect.addEventListener('change', (e) => {
       const newMode = e.target.value;
-      playerModeSelect.value = newMode;
       if (currentPlayingVideo) {
         currentPlayingVideo.mode_3d = newMode;
         updatePlayerBadge(newMode);
@@ -386,20 +432,9 @@ document.addEventListener('DOMContentLoaded', () => {
       if (window.xrPlayer) {
         window.xrPlayer.setProjectionMode(newMode);
       }
+      updateFormatDropdownActiveState();
     });
   }
-
-  playerModeSelect.addEventListener('change', (e) => {
-    const newMode = e.target.value;
-    if (overlayModeSelect) overlayModeSelect.value = newMode;
-    if (currentPlayingVideo) {
-      currentPlayingVideo.mode_3d = newMode;
-      updatePlayerBadge(newMode);
-    }
-    if (window.xrPlayer) {
-      window.xrPlayer.setProjectionMode(newMode);
-    }
-  });
 
   // Exit VR / Fullscreen
   overlayBtnExitVr.addEventListener('click', (e) => {
