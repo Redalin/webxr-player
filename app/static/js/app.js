@@ -7,6 +7,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const videoGrid = document.getElementById('video-grid');
   const loadingSpinner = document.getElementById('loading-spinner');
   const emptyState = document.getElementById('empty-state');
+  const pathBreadcrumb = document.getElementById('path-breadcrumb');
   const currentPathLabel = document.getElementById('current-path-label');
   const videoSearchInput = document.getElementById('video-search-input');
   const filter3DMode = document.getElementById('filter-3d-mode');
@@ -380,6 +381,49 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
+  function renderBreadcrumbs(pathStr) {
+    if (!pathBreadcrumb) return;
+    pathBreadcrumb.innerHTML = '<span class="breadcrumb-label">Path:</span>';
+
+    const normalized = (pathStr || '/media').replace(/\\/g, '/');
+    const parts = normalized.split('/').filter(p => p.length > 0);
+
+    // 1. Root Segment (/)
+    const rootSegment = document.createElement('button');
+    rootSegment.className = `breadcrumb-segment ${parts.length === 0 ? 'active' : ''}`;
+    rootSegment.title = 'Root directory /';
+    rootSegment.innerHTML = '<span>🏠</span> <span>/</span>';
+    rootSegment.addEventListener('click', () => loadDirectory('/'));
+    pathBreadcrumb.appendChild(rootSegment);
+
+    // 2. Path Segments
+    let currentAcc = '';
+    parts.forEach((part, index) => {
+      currentAcc += '/' + part;
+      const targetPath = currentAcc;
+      const isLast = (index === parts.length - 1);
+
+      // Separator /
+      const sep = document.createElement('span');
+      sep.className = 'breadcrumb-separator';
+      sep.textContent = '/';
+      pathBreadcrumb.appendChild(sep);
+
+      // Segment Button
+      const segBtn = document.createElement('button');
+      segBtn.className = `breadcrumb-segment ${isLast ? 'active' : ''}`;
+      segBtn.title = targetPath;
+      segBtn.innerHTML = `<span>📁</span> <span>${part}</span>`;
+      segBtn.addEventListener('click', () => loadDirectory(targetPath));
+      pathBreadcrumb.appendChild(segBtn);
+    });
+
+    // 3. Append ⭐ Star Favorite Button for current path
+    if (btnToggleFavorite) {
+      pathBreadcrumb.appendChild(btnToggleFavorite);
+    }
+  }
+
   // API Call Functions
   async function loadDirectory(path) {
     showLoading(true);
@@ -390,8 +434,11 @@ document.addEventListener('DOMContentLoaded', () => {
       currentPath = data.current;
       parentDirectory = (data.parent && data.parent !== currentPath) ? data.parent : null;
       serverPathInput.value = currentPath;
-      currentPathLabel.textContent = currentPath;
-      currentPathLabel.title = currentPath;
+      if (currentPathLabel) {
+        currentPathLabel.textContent = currentPath;
+        currentPathLabel.title = currentPath;
+      }
+      renderBreadcrumbs(currentPath);
       updateFavoriteStar();
 
       loadedDirectories = data.directories || [];
