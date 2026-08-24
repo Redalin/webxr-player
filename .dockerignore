@@ -1,0 +1,36 @@
+# Git
+.git
+.gitignore
+
+# Docker setup
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# Python bytecode & environments
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.venv
+venv
+env
+
+# App generated thumbnails and SSL certs
+app/.thumbnails
+certs
+*.pem
+*.key
+
+# Media files (mounted via volume at runtime)
+media/*.mp4
+media/*.mkv
+media/*.webm
+media/*.avi
+media/*.mov
+
+# OS / Editor junk
+.DS_Store
+.vscode
+.idea
+

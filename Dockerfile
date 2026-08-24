@@ -15,8 +15,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application files
 COPY . /app/
 
-# Create media, thumbnail, and cert directory defaults
-RUN mkdir -p /media /app/.thumbnails /app/certs
+# Ensure /media directory exists and symlink /app/media -> /media so both paths work identically
+RUN mkdir -p /media /app/.thumbnails /app/certs && \
+    rm -rf /app/media && \
+    ln -s /media /app/media
 
 ENV MEDIA_DIR=/media
 ENV HTTP_PORT=8000

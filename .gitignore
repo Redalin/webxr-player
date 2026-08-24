@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+.venv/
+
+# App Generated Cache & Certs
+app/.thumbnails/
+certs/
+*.pem
+*.key
+
+# Media files (ignore uploaded/generated videos, keep README)
+media/*
+!media/README.md
+
+# IDE / OS / Tooling
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Docker / Podman local logs
+*.log
+
