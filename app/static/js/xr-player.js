@@ -27,6 +27,10 @@ class XRVideoPlayer {
     this.isDragging = false;
     this.activeDragController = null;
 
+    // VR Joystick 5-second jog state
+    this.lastJoystickJogTime = 0;
+    this.joystickJogActive = false;
+
     this.checkXRSupport();
   }
 
@@ -718,10 +722,89 @@ class XRVideoPlayer {
     }
   }
 
+  updateJoystickJog(frame) {
+    if (!frame) return;
+    const session = frame.session;
+    if (!session || !session.inputSources) return;
+
+    let maxMagnitude = 0;
+    let targetAxisX = 0;
+    let activeSource = null;
+
+    const sources = Array.from(session.inputSources);
+    for (let i = 0; i < sources.length; i++) {
+      const source = sources[i];
+      if (source && source.gamepad && source.gamepad.axes) {
+        const axes = source.gamepad.axes;
+        // Thumbstick X-axis (index 2 on standard WebXR gamepad, fallback to 0)
+        let axisX = 0;
+        if (axes.length >= 4) {
+          axisX = axes[2];
+        } else if (axes.length > 0) {
+          axisX = axes[0];
+        }
+
+        if (Math.abs(axisX) > maxMagnitude) {
+          maxMagnitude = Math.abs(axisX);
+          targetAxisX = axisX;
+          activeSource = source;
+        }
+      }
+    }
+
+    const now = performance.now();
+    const deadzone = 0.25;
+    const threshold = 0.55;
+
+    // Reset lock when joystick returns to center
+    if (maxMagnitude < deadzone) {
+      this.joystickJogActive = false;
+      return;
+    }
+
+    // Trigger 5-second jog step when thumbstick is flicked/tilted left or right
+    if (!this.joystickJogActive || (now - this.lastJoystickJogTime > 250)) {
+      if (targetAxisX < -threshold) {
+        // Jog Backward 5 seconds
+        this.joystickJogActive = true;
+        this.lastJoystickJogTime = now;
+
+        if (window.seekToTime && window.getCurrentTime) {
+          const current = window.getCurrentTime();
+          window.seekToTime(current - 5);
+        }
+
+        // Haptic vibration feedback pulse on joystick jog
+        const controllerObj = this.controllers[sources.indexOf(activeSource)] || this.controllers[0];
+        if (controllerObj) {
+          this.triggerHapticPulse(controllerObj, 0.5, 40);
+        }
+      } else if (targetAxisX > threshold) {
+        // Jog Forward 5 seconds
+        this.joystickJogActive = true;
+        this.lastJoystickJogTime = now;
+
+        if (window.seekToTime && window.getCurrentTime) {
+          const current = window.getCurrentTime();
+          window.seekToTime(current + 5);
+        }
+
+        // Haptic vibration feedback pulse on joystick jog
+        const controllerObj = this.controllers[sources.indexOf(activeSource)] || this.controllers[0];
+        if (controllerObj) {
+          this.triggerHapticPulse(controllerObj, 0.5, 40);
+        }
+      }
+    }
+  }
+
   renderVR(time, frame) {
     if (this.videoTexture) {
       this.videoTexture.needsUpdate = true;
     }
+
+    // Process VR controller joystick / thumbstick X-axis jog (±5 seconds per move)
+    this.updateJoystickJog(frame);
 
     // Update laser line trimming, reticle dot position, and haptics hover
     this.updateRaycastingAndHover();
