@@ -155,35 +155,40 @@ class MediaService:
     def transcode_stream_generator(video_path: str, start_time: float = 0.0):
         """
         Streams video/audio using FFmpeg outputting fragmented MP4 directly to stdout pipe.
-        Fast, on-the-fly transcoding and container remuxing for MKV, AVI, AC3, DTS, MPEG4 files.
-        Includes A/V synchronization flags (-avoid_negative_ts make_zero, aresample=async=1000) to prevent audio drift.
+        Fast, real-time video encoding (libx264 ultrafast) with strict A/V frame synchronization
+        (-async 1 -vsync cfr -first_pts 0 -avoid_negative_ts make_zero) to ensure audio and video start in exact lockstep.
         """
-        needs_transcode, copy_video, copy_audio = MediaService.should_transcode(video_path)
-
         cmd = ["ffmpeg", "-loglevel", "error"]
         if start_time > 0:
             cmd.extend(["-ss", str(start_time)])
 
         cmd.extend([
             "-i", video_path,
-            "-avoid_negative_ts", "make_zero"
+            "-async", "1",
+            "-vsync", "cfr"
         ])
 
-        if copy_video:
-            cmd.extend(["-c:v", "copy"])
-        else:
-            # Transcode video to H.264 ultrafast for real-time smooth playback
-            cmd.extend(["-c:v", "libx264", "-preset", "ultrafast", "-crf", "23", "-pix_fmt", "yuv420p"])
+        # Re-encode video using libx264 ultrafast to enforce zero-delay timestamp alignment
+        cmd.extend([
+            "-c:v", "libx264",
+            "-preset", "ultrafast",
+            "-crf", "23",
+            "-pix_fmt", "yuv420p",
+            "-g", "30"
+        ])
 
-        if copy_audio:
-            cmd.extend(["-c:a", "copy"])
-        else:
-            # Transcode audio to AAC 192k with async resampling for strict A/V sync
-            cmd.extend(["-c:a", "aac", "-b:a", "192k", "-ac", "2", "-af", "aresample=async=1000"])
+        # Transcode audio to AAC 192k with hard first_pts=0 synchronization
+        cmd.extend([
+            "-c:a", "aac",
+            "-b:a", "192k",
+            "-ac", "2",
+            "-af", "aresample=async=1:min_hard_comp=0.100000:first_pts=0"
+        ])
 
         # Output fragmented MP4 directly to stdout pipe with max muxing queue size
         cmd.extend([
-            "-max_muxing_queue_size", "1024",
+            "-avoid_negative_ts", "make_zero",
+            "-max_muxing_queue_size", "2048",
             "-f", "mp4",
             "-movflags", "frag_keyframe+empty_moov+default_base_moof",
             "pipe:1"
