@@ -2,6 +2,8 @@
 
 A WebXR 3D video streaming application designed for VR headsets and AR/3D glasses (Meta Quest, Apple Vision Pro, XREAL, Pico, HTC Vive, etc.).
 
+Vibe coded using Google Antigravity on Gemini Flash 3.6 (High)
+
 Features:
 - 📁 **Filesystem Directory Picker**: Browse and select any folder on the host/server filesystem or Docker volume mount.
 - 🖼️ **Thumbnail & Video Metadata Page**: Dynamic FFmpeg thumbnail generation, video resolution, duration, codec, file size, and auto-detected 3D mode badges.
@@ -20,6 +22,8 @@ docker compose up --build
 ```
 
 The application will be accessible at `http://localhost:8000`.
+
+This will auto-redirect to `https://localhost:8443` using a self-signed certificate.
 
 ### 2. Mounting Host Video Folders
 By default, `./media` is mounted to `/media` inside the container. To mount your host video library (e.g. `/home/user/Videos` or `/mnt/storage`), update `docker-compose.yml`:
