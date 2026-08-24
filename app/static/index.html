@@ -130,10 +130,10 @@
         <div class="player-title" id="player-title">Video Title</div>
         <div class="player-controls-top">
           <span class="badge badge-3d" id="player-3d-badge">3D SBS</span>
-          <button id="btn-enter-fullscreen-3d" class="btn btn-secondary" title="Fullscreen SBS/Stereo playback for 3D Glasses (XREAL/Viture/Rokid/3D TV)">
+          <button id="btn-enter-fullscreen-3d" class="btn btn-secondary" title="Fullscreen SBS/Stereo/3D Playback">
             📺 FULLSCREEN 3D
           </button>
-          <button id="btn-enter-webxr" class="btn btn-xr" title="Enter WebXR VR Immersive Mode">
+          <button id="btn-enter-webxr" class="btn btn-xr" title="Enter Immersive Mode">
             🥽 ENTER WEBXR (VR 3D)
           </button>
           <button id="btn-close-player" class="btn-close">&times;</button>
@@ -150,9 +150,14 @@
             <span id="overlay-time-total" class="time-label">00:00</span>
           </div>
           <div class="overlay-row main-controls-row">
-            <button id="overlay-btn-play" class="btn btn-primary btn-play-pause" title="Play / Pause">
-              <span id="overlay-play-icon">▶</span> <span id="overlay-play-text">Play</span>
-            </button>
+            <div class="overlay-playback-group">
+              <button id="overlay-btn-play" class="btn btn-primary btn-play-pause" title="Play / Pause">
+                <span id="overlay-play-icon">▶</span> <span id="overlay-play-text">Play</span>
+              </button>
+              <button id="overlay-btn-mute" class="btn btn-secondary btn-mute-toggle" title="Mute / Unmute Sound">
+                <span id="overlay-mute-icon">🔊</span> <span id="overlay-mute-text">Mute</span>
+              </button>
+            </div>
             
             <div class="overlay-mode-group">
               <label for="overlay-mode-select">3D Projection:</label>
@@ -177,7 +182,7 @@
         </div>
       </div>
       <div class="player-options-bar">
-        <label for="player-mode-select">3D Projection Format:</label>
+        <label for="player-mode-select">3D Format:</label>
         <select id="player-mode-select">
           <option value="2d">2D Flat Screen</option>
           <option value="3d_sbs">3D Side-by-Side (SBS)</option>
@@ -185,7 +190,6 @@
           <option value="3d_180_sbs">3D 180° VR Hemisphere</option>
           <option value="3d_360_sbs">3D 360° VR Sphere</option>
         </select>
-        <span class="hint-text">Select 3D mode. For Meta Quest / Vision Pro use WebXR. For XREAL/Rokid/Viture glasses use Fullscreen 3D.</span>
       </div>
     </div>
   </div>

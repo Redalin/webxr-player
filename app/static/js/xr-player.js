@@ -321,7 +321,8 @@ class XRVideoPlayer {
     this.drawRoundedRect(ctx, 60, 35, 540, 42, 10, true, true, isDragHover ? '#818cf8' : '#3f4260');
     ctx.fillStyle = '#ffffff';
     ctx.font = 'bold 20px -apple-system, sans-serif';
-    ctx.fillText('≡ DRAG PANEL TO MOVE', 80, 63);
+    const videoTitle = (this.videoElement && this.videoElement.title) ? this.videoElement.title : 'DRAG PANEL TO MOVE';
+    ctx.fillText(`≡ ${this.truncateString(videoTitle, 26)}`, 80, 63);
 
     // 2. CLOSE BUTTON [✖] (Top Right) [x: 934..994, y: 35..77]
     const isCloseHover = (this.currentHoveredButton === 'close_btn');
@@ -391,28 +392,37 @@ class XRVideoPlayer {
       ctx.fillText(m.label, m.x + 60, 314);
     });
 
-    // 5. Action Buttons: Re-Center, Exit VR & Close Video [y: 380..460]
-    // Re-Center Button [x: 60..320]
+    // 5. Action Buttons: Mute, Re-Center, Exit VR & Close Video [y: 380..460]
+    // Mute Button [x: 60..240]
+    const isMuted = this.videoElement ? this.videoElement.muted : false;
+    const isMuteHover = (this.currentHoveredButton === 'mute_btn');
+    ctx.fillStyle = isMuteHover ? '#4b5563' : (isMuted ? '#ef4444' : '#374151');
+    this.drawRoundedRect(ctx, 60, 380, 180, 80, 14, true, true, isMuteHover ? '#9ca3af' : '#4b5563');
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 20px sans-serif';
+    ctx.fillText(isMuted ? '🔇 UNMUTE' : '🔊 MUTE', 150, 428);
+
+    // Re-Center Button [x: 260..480]
     const isRecenterHover = (this.currentHoveredButton === 'recenter_btn');
     ctx.fillStyle = isRecenterHover ? '#10b981' : '#059669';
-    this.drawRoundedRect(ctx, 60, 380, 260, 80, 14, true, true, isRecenterHover ? '#6ee7b7' : '#10b981');
+    this.drawRoundedRect(ctx, 260, 380, 220, 80, 14, true, true, isRecenterHover ? '#6ee7b7' : '#10b981');
     ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 21px sans-serif';
-    ctx.fillText('🎯 RE-CENTER', 190, 428);
+    ctx.font = 'bold 20px sans-serif';
+    ctx.fillText('🎯 RE-CENTER', 370, 428);
 
-    // Exit VR Button [x: 340..640]
+    // Exit VR Button [x: 500..720]
     const isExitVrHover = (this.currentHoveredButton === 'exit_vr_btn');
     ctx.fillStyle = isExitVrHover ? '#4b5563' : '#374151';
-    this.drawRoundedRect(ctx, 340, 380, 300, 80, 14, true, true, isExitVrHover ? '#9ca3af' : '#4b5563');
+    this.drawRoundedRect(ctx, 500, 380, 220, 80, 14, true, true, isExitVrHover ? '#9ca3af' : '#4b5563');
     ctx.fillStyle = '#ffffff';
-    ctx.fillText('🚪 EXIT VR MODE', 490, 428);
+    ctx.fillText('🚪 EXIT VR', 610, 428);
 
-    // Close Video Button [x: 660..964]
+    // Close Video Button [x: 740..964]
     const isCloseVidHover = (this.currentHoveredButton === 'close_video_btn');
     ctx.fillStyle = isCloseVidHover ? '#ef4444' : '#dc2626';
-    this.drawRoundedRect(ctx, 660, 380, 304, 80, 14, true, true, isCloseVidHover ? '#fca5a5' : '#ef4444');
+    this.drawRoundedRect(ctx, 740, 380, 224, 80, 14, true, true, isCloseVidHover ? '#fca5a5' : '#ef4444');
     ctx.fillStyle = '#ffffff';
-    ctx.fillText('✖ CLOSE VIDEO', 812, 428);
+    ctx.fillText('✖ CLOSE', 852, 428);
 
     ctx.textAlign = 'left';
     if (this.hudTexture) this.hudTexture.needsUpdate = true;
@@ -499,9 +509,10 @@ class XRVideoPlayer {
       if (x >= 820 && x <= 940) return '3d_360_sbs';
     }
     if (y >= 380 && y <= 460) {
-      if (x >= 60 && x <= 320) return 'recenter_btn';
-      if (x >= 340 && x <= 640) return 'exit_vr_btn';
-      if (x >= 660 && x <= 964) return 'close_video_btn';
+      if (x >= 60 && x <= 240) return 'mute_btn';
+      if (x >= 260 && x <= 480) return 'recenter_btn';
+      if (x >= 500 && x <= 720) return 'exit_vr_btn';
+      if (x >= 740 && x <= 964) return 'close_video_btn';
     }
     return null;
   }
@@ -595,20 +606,20 @@ class XRVideoPlayer {
         else if (x >= 680 && x <= 800) this.setProjectionMode('3d_180_sbs');
         else if (x >= 820 && x <= 940) this.setProjectionMode('3d_360_sbs');
       }
-      // 6. Re-Center Button Click (x: 60..320, y: 380..460)
-      else if (x >= 60 && x <= 320 && y >= 380 && y <= 460) {
-        this.recenterVRView();
-      }
-      // 7. Exit VR Mode Click (x: 340..640, y: 380..460)
-      else if (x >= 340 && x <= 640 && y >= 380 && y <= 460) {
-        this.exitVR();
-      }
-      // 8. Close Video Click (x: 660..964, y: 380..460)
-      else if (x >= 660 && x <= 964 && y >= 380 && y <= 460) {
-        if (this.videoElement) this.videoElement.pause();
-        this.exitVR();
-        const closeBtn = document.getElementById('btn-close-player');
-        if (closeBtn) closeBtn.click();
+      // 6. Action Buttons (y: 380..460)
+      else if (y >= 380 && y <= 460) {
+        if (x >= 60 && x <= 240) {
+          if (this.videoElement) this.videoElement.muted = !this.videoElement.muted;
+        } else if (x >= 260 && x <= 480) {
+          this.recenterVRView();
+        } else if (x >= 500 && x <= 720) {
+          this.exitVR();
+        } else if (x >= 740 && x <= 964) {
+          if (this.videoElement) this.videoElement.pause();
+          this.exitVR();
+          const closeBtn = document.getElementById('btn-close-player');
+          if (closeBtn) closeBtn.click();
+        }
       }
 
       this.showVRHUD();
@@ -761,6 +772,11 @@ class XRVideoPlayer {
     const m = Math.floor(secs / 60);
     const s = secs % 60;
     return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+  }
+
+  truncateString(str, maxLen = 30) {
+    if (!str) return '';
+    return str.length > maxLen ? str.substring(0, maxLen - 3) + '...' : str;
   }
 }
 

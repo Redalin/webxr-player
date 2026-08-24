@@ -38,6 +38,9 @@ document.addEventListener('DOMContentLoaded', () => {
   const overlayBtnPlay = document.getElementById('overlay-btn-play');
   const overlayPlayIcon = document.getElementById('overlay-play-icon');
   const overlayPlayText = document.getElementById('overlay-play-text');
+  const overlayBtnMute = document.getElementById('overlay-btn-mute');
+  const overlayMuteIcon = document.getElementById('overlay-mute-icon');
+  const overlayMuteText = document.getElementById('overlay-mute-text');
   const overlaySeekBar = document.getElementById('overlay-seek-bar');
   const overlayTimeCurrent = document.getElementById('overlay-time-current');
   const overlayTimeTotal = document.getElementById('overlay-time-total');
@@ -188,6 +191,24 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
+  if (overlayBtnMute) {
+    overlayBtnMute.addEventListener('click', (e) => {
+      e.stopPropagation();
+      webVideoElement.muted = !webVideoElement.muted;
+      updateMuteUI();
+    });
+  }
+
+  function updateMuteUI() {
+    if (webVideoElement.muted) {
+      if (overlayMuteIcon) overlayMuteIcon.textContent = '🔇';
+      if (overlayMuteText) overlayMuteText.textContent = 'Unmute';
+    } else {
+      if (overlayMuteIcon) overlayMuteIcon.textContent = '🔊';
+      if (overlayMuteText) overlayMuteText.textContent = 'Mute';
+    }
+  }
+
   webVideoElement.addEventListener('play', () => {
     overlayPlayIcon.textContent = '⏸';
     overlayPlayText.textContent = 'Pause';
@@ -305,6 +326,7 @@ document.addEventListener('DOMContentLoaded', () => {
       currentPath = data.current;
       serverPathInput.value = currentPath;
       currentPathLabel.textContent = currentPath;
+      currentPathLabel.title = currentPath;
 
       loadedVideos = data.videos || [];
       renderVideoGrid();
@@ -326,12 +348,14 @@ document.addEventListener('DOMContentLoaded', () => {
     fsModal.classList.add('active');
     modalCurrentPath = path;
     modalPathDisplay.textContent = path;
+    modalPathDisplay.title = path;
     directoryList.innerHTML = '<p style="color: var(--text-muted);">Loading directories...</p>';
 
     try {
       const data = await fetchBrowseData(path);
       modalCurrentPath = data.current;
       modalPathDisplay.textContent = modalCurrentPath;
+      modalPathDisplay.title = modalCurrentPath;
 
       directoryList.innerHTML = '';
       if (data.directories.length === 0) {
@@ -340,7 +364,8 @@ document.addEventListener('DOMContentLoaded', () => {
         data.directories.forEach(dir => {
           const item = document.createElement('div');
           item.className = 'dir-item';
-          item.innerHTML = `<span>📁</span> <strong>${dir.name}</strong>`;
+          item.title = dir.name;
+          item.innerHTML = `<span>📁</span> <strong title="${dir.name}">${dir.name}</strong>`;
           item.addEventListener('click', () => openFSModal(dir.path));
           directoryList.appendChild(item);
         });
@@ -460,6 +485,8 @@ document.addEventListener('DOMContentLoaded', () => {
   function openPlayerModal(video) {
     currentPlayingVideo = video;
     playerTitle.textContent = video.name;
+    playerTitle.title = video.name;
+    webVideoElement.title = video.name;
     playerModeSelect.value = video.mode_3d;
     overlayModeSelect.value = video.mode_3d;
     updatePlayerBadge(video.mode_3d);
