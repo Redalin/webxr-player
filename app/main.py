@@ -39,11 +39,19 @@ async def get_thumbnail(path: str = Query(...)):
     
     thumb_path = MediaService.get_or_generate_thumbnail(path)
     if thumb_path and thumb_path.exists():
-        return FileResponse(str(thumb_path), media_type="image/jpeg")
+        return FileResponse(
+            str(thumb_path),
+            media_type="image/jpeg",
+            headers={"Cache-Control": "public, max-age=86400"}
+        )
     
     # SVG Fallback icon if ffmpeg thumbnail failed
     svg_placeholder = """<svg xmlns="http://www.w3.org/2000/svg" width="480" height="270" viewBox="0 0 480 270" fill="#1e1e28"><rect width="480" height="270" fill="#181824"/><polygon points="210,105 290,135 210,165" fill="#6366f1"/></svg>"""
-    return Response(content=svg_placeholder, media_type="image/svg+xml")
+    return Response(
+        content=svg_placeholder,
+        media_type="image/svg+xml",
+        headers={"Cache-Control": "public, max-age=86400"}
+    )
 
 @app.get("/api/stream")
 async def stream_video(request: Request, path: str = Query(...)):

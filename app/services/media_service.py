@@ -5,12 +5,19 @@ import json
 import re
 from pathlib import Path
 from typing import List, Dict, Any, Optional
+from concurrent.futures import ThreadPoolExecutor
 
 VIDEO_EXTENSIONS = {'.mp4', '.mkv', '.webm', '.avi', '.mov', '.m4v', '.ts', '.wmv'}
 THUMBNAIL_DIR = Path(__file__).parent.parent / ".thumbnails"
 THUMBNAIL_DIR.mkdir(parents=True, exist_ok=True)
 
+MAX_THUMBNAIL_CACHE_MB = 150
+TARGET_THUMBNAIL_CACHE_MB = 100
+MAX_THUMBNAIL_COUNT = 500
+
 class MediaService:
+    _metadata_cache: Dict[str, Dict[str, Any]] = {}
+
     @staticmethod
     def is_video_file(file_path: Path) -> bool:
         return file_path.suffix.lower() in VIDEO_EXTENSIONS
@@ -24,7 +31,7 @@ class MediaService:
                 path = Path(os.getcwd()).resolve()
 
         directories = []
-        video_files = []
+        video_entries = []
 
         try:
             entries = sorted(list(path.iterdir()), key=lambda e: (not e.is_dir(), e.name.lower()))
@@ -37,9 +44,15 @@ class MediaService:
                         "path": str(entry.resolve())
                     })
                 elif entry.is_file() and MediaService.is_video_file(entry):
-                    video_files.append(MediaService.get_video_info(entry))
+                    video_entries.append(entry)
         except PermissionError:
             pass
+
+        # Parallelize metadata scanning for video files
+        video_files = []
+        if video_entries:
+            with ThreadPoolExecutor(max_workers=min(8, len(video_entries))) as executor:
+                video_files = list(executor.map(MediaService.get_video_info, video_entries))
 
         parent = str(path.parent.resolve()) if path != path.parent else None
 
@@ -53,9 +66,18 @@ class MediaService:
     @staticmethod
     def get_video_info(file_path: Path) -> Dict[str, Any]:
         path_str = str(file_path.resolve())
-        file_size = file_path.stat().st_size if file_path.exists() else 0
-        
-        # Default fallback metadata
+        try:
+            stat = file_path.stat()
+            file_size = stat.st_size
+            mtime = stat.st_mtime
+        except Exception:
+            file_size = 0
+            mtime = 0
+
+        cache_key = f"{path_str}:{mtime}:{file_size}"
+        if cache_key in MediaService._metadata_cache:
+            return MediaService._metadata_cache[cache_key]
+
         info = {
             "name": file_path.name,
             "path": path_str,
@@ -85,6 +107,7 @@ class MediaService:
                     info["mode_3d"] = MediaService.detect_3d_mode(file_path.name, width, height)
                     break
 
+        MediaService._metadata_cache[cache_key] = info
         return info
 
     @staticmethod
@@ -141,16 +164,17 @@ class MediaService:
         if not os.path.exists(video_path):
             return None
 
-        # Create unique hash for video path
+        # Clean cache if it's growing too large
+        MediaService.clean_thumbnail_cache()
+
         path_hash = hashlib.md5(video_path.encode('utf-8')).hexdigest()
         thumb_path = THUMBNAIL_DIR / f"{path_hash}.jpg"
 
         if thumb_path.exists() and thumb_path.stat().st_size > 0:
             return thumb_path
 
-        # Generate thumbnail using ffmpeg
+        # Generate thumbnail using ffmpeg with cached metadata
         try:
-            # First get duration to seek to ~15% or 10s
             info = MediaService.get_video_info(Path(video_path))
             duration = info.get("duration", 0)
             seek_time = max(5, int(duration * 0.15)) if duration > 10 else 1
@@ -161,17 +185,45 @@ class MediaService:
                 "-ss", str(seek_time),
                 "-i", video_path,
                 "-vframes", "1",
-                "-q:v", "3",
+                "-q:v", "4",
                 "-vf", "scale=480:-1",
                 str(thumb_path)
             ]
-            result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=10)
+            result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=8)
             if result.returncode == 0 and thumb_path.exists():
                 return thumb_path
         except Exception as e:
             print(f"Error generating thumbnail for {video_path}: {e}")
 
         return None
+
+    @staticmethod
+    def clean_thumbnail_cache():
+        try:
+            thumbs = list(THUMBNAIL_DIR.glob("*.jpg"))
+            if not thumbs:
+                return
+
+            total_size_bytes = sum(t.stat().st_size for t in thumbs if t.exists())
+            total_size_mb = total_size_bytes / (1024 * 1024)
+            count = len(thumbs)
+
+            if total_size_mb > MAX_THUMBNAIL_CACHE_MB or count > MAX_THUMBNAIL_COUNT:
+                # Sort by modification time (oldest first)
+                thumbs.sort(key=lambda t: t.stat().st_mtime)
+                target_bytes = TARGET_THUMBNAIL_CACHE_MB * 1024 * 1024
+                
+                for t in thumbs:
+                    if total_size_bytes <= target_bytes and len(thumbs) <= 300:
+                        break
+                    try:
+                        sz = t.stat().st_size
+                        t.unlink(missing_ok=True)
+                        total_size_bytes -= sz
+                    except Exception:
+                        pass
+        except Exception as e:
+            print(f"Error during thumbnail cache cleanup: {e}")
 
     @staticmethod
     def format_size(size_bytes: int) -> str:
@@ -191,4 +243,3 @@ class MediaService:
         if hrs > 0:
             return f"{hrs:02d}:{mins:02d}:{secs:02d}"
         return f"{mins:02d}:{secs:02d}"
-
