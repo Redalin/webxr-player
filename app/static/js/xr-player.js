@@ -19,7 +19,13 @@ class XRVideoPlayer {
     this.hudVisible = true;
     this.hudTimer = null;
     this.controllers = [];
+    this.reticleDots = [];
     this.raycaster = new THREE.Raycaster();
+    this.currentHoveredButton = null;
+
+    // Dragging state
+    this.isDragging = false;
+    this.activeDragController = null;
 
     this.checkXRSupport();
   }
@@ -92,10 +98,14 @@ class XRVideoPlayer {
     const ambientLight = new THREE.AmbientLight(0xffffff, 1.2);
     this.scene.add(ambientLight);
 
-    // Setup VR Controllers & Laser Pointers
+    // Setup VR Controllers, Laser Pointers, and Reticle Dots
     this.controllers = [];
+    this.reticleDots = [];
     for (let i = 0; i < 2; i++) {
       const controller = this.renderer.xr.getController(i);
+
+      controller.addEventListener('selectstart', (e) => this.onControllerSelectStart(controller));
+      controller.addEventListener('selectend', (e) => this.onControllerSelectEnd(controller));
       controller.addEventListener('select', (e) => this.onVRControllerSelect(controller));
 
       // Laser pointer line
@@ -103,12 +113,39 @@ class XRVideoPlayer {
         new THREE.Vector3(0, 0, 0),
         new THREE.Vector3(0, 0, -5)
       ]);
-      const laserMat = new THREE.LineBasicMaterial({ color: 0x6366f1, opacity: 0.75, transparent: true });
+      const laserMat = new THREE.LineBasicMaterial({ color: 0x6366f1, opacity: 0.85, transparent: true });
       const laser = new THREE.Line(laserGeo, laserMat);
+      laser.name = "laserBeam";
       controller.add(laser);
+
+      // Reticle Dot (Target dot at laser intersection point)
+      const dotGeo = new THREE.RingGeometry(0.012, 0.026, 32);
+      const dotMat = new THREE.MeshBasicMaterial({ color: 0xec4899, side: THREE.DoubleSide, depthTest: false });
+      const reticleDot = new THREE.Mesh(dotGeo, dotMat);
+      reticleDot.name = "reticleDot";
+      reticleDot.visible = false;
+      reticleDot.renderOrder = 999;
+      this.scene.add(reticleDot);
 
       this.scene.add(controller);
       this.controllers.push(controller);
+      this.reticleDots.push(reticleDot);
+    }
+  }
+
+  // Controller Haptics Trigger (Vibration pulse)
+  triggerHapticPulse(controller, intensity = 0.5, duration = 40) {
+    if (!this.xrSession) return;
+    try {
+      const inputSources = Array.from(this.xrSession.inputSources || []);
+      const index = this.controllers.indexOf(controller);
+      const source = inputSources[index] || inputSources.find(s => s.targetRayMode === 'tracked-pointer');
+
+      if (source && source.gamepad && source.gamepad.hapticActuators && source.gamepad.hapticActuators.length > 0) {
+        source.gamepad.hapticActuators[0].pulse(intensity, duration);
+      }
+    } catch (e) {
+      // Haptics API not available on this platform
     }
   }
 
@@ -223,7 +260,6 @@ class XRVideoPlayer {
     this.hudMesh.position.set(0, 0.85, -1.8);
     this.hudMesh.rotation.x = -0.15;
 
-    // Make HUD visible to both eyes (Layer 0, 1, 2)
     this.hudMesh.layers.enable(0);
     this.hudMesh.layers.enable(1);
     this.hudMesh.layers.enable(2);
@@ -235,19 +271,32 @@ class XRVideoPlayer {
   showVRHUD() {
     this.hudVisible = true;
     if (this.hudMesh) this.hudMesh.visible = true;
+    this.setLasersVisible(true);
     this.updateVRHUDCanvas();
 
     clearTimeout(this.hudTimer);
     this.hudTimer = setTimeout(() => {
-      if (this.videoElement && !this.videoElement.paused) {
+      if (this.videoElement && !this.videoElement.paused && !this.isDragging) {
         this.hideVRHUD();
       }
-    }, 5000);
+    }, 6000);
   }
 
   hideVRHUD() {
     this.hudVisible = false;
+    this.isDragging = false;
+    this.activeDragController = null;
+    this.currentHoveredButton = null;
     if (this.hudMesh) this.hudMesh.visible = false;
+    this.setLasersVisible(false);
+    this.reticleDots.forEach(dot => { dot.visible = false; });
+  }
+
+  setLasersVisible(visible) {
+    this.controllers.forEach(controller => {
+      const laser = controller.getObjectByName("laserBeam");
+      if (laser) laser.visible = visible;
+    });
   }
 
   updateVRHUDCanvas() {
@@ -259,21 +308,34 @@ class XRVideoPlayer {
     ctx.clearRect(0, 0, w, h);
 
     // Background Glassmorphism Panel
-    ctx.fillStyle = 'rgba(18, 19, 30, 0.92)';
+    ctx.fillStyle = 'rgba(18, 19, 30, 0.94)';
     this.drawRoundedRect(ctx, 20, 20, w - 40, h - 40, 24, true, true, '#2e3046');
 
-    // Title / Status
-    ctx.fillStyle = '#f3f4f6';
-    ctx.font = 'bold 28px -apple-system, sans-serif';
-    ctx.fillText('WebXR 3D Media Controls', 60, 75);
+    // 1. DRAG BAR (Top Left Handle) [x: 60..600, y: 35..77]
+    const isDragHover = (this.currentHoveredButton === 'drag_bar');
+    ctx.fillStyle = this.isDragging ? '#4f46e5' : (isDragHover ? '#3730a3' : '#26283b');
+    this.drawRoundedRect(ctx, 60, 35, 540, 42, 10, true, true, isDragHover ? '#818cf8' : '#3f4260');
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 20px -apple-system, sans-serif';
+    ctx.fillText('≡ DRAG PANEL TO MOVE', 80, 63);
 
-    // Current Mode Badge
+    // 2. CLOSE BUTTON [✖] (Top Right) [x: 934..994, y: 35..77]
+    const isCloseHover = (this.currentHoveredButton === 'close_btn');
+    ctx.fillStyle = isCloseHover ? '#ef4444' : '#dc2626';
+    this.drawRoundedRect(ctx, 934, 35, 60, 42, 10, true, true, isCloseHover ? '#fca5a5' : '#ef4444');
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 24px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('✖', 964, 65);
+    ctx.textAlign = 'left';
+
+    // Current Mode Badge [x: 620..920]
     ctx.fillStyle = '#6366f1';
-    this.drawRoundedRect(ctx, w - 240, 45, 180, 42, 10, true, false);
+    this.drawRoundedRect(ctx, 620, 35, 300, 42, 10, true, false);
     ctx.fillStyle = '#ffffff';
     ctx.font = 'bold 20px sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText(this.getModeTitle(this.mode3D), w - 150, 73);
+    ctx.fillText(this.getModeTitle(this.mode3D), 770, 63);
     ctx.textAlign = 'left';
 
     // Video Progress Bar Track
@@ -281,12 +343,13 @@ class XRVideoPlayer {
     const duration = (this.videoElement && this.videoElement.duration) ? this.videoElement.duration : 1;
     const progressPct = Math.min(1, currentTime / duration);
 
-    ctx.fillStyle = '#2e3046';
-    this.drawRoundedRect(ctx, 60, 160, 904, 20, 10, true, false);
+    const isSeekHover = (this.currentHoveredButton === 'seek_bar');
+    ctx.fillStyle = isSeekHover ? '#3f4260' : '#2e3046';
+    this.drawRoundedRect(ctx, 60, 160, 904, 20, 10, true, isSeekHover, '#818cf8');
 
     // Filled Progress Bar
     if (progressPct > 0) {
-      ctx.fillStyle = '#6366f1';
+      ctx.fillStyle = isSeekHover ? '#818cf8' : '#6366f1';
       this.drawRoundedRect(ctx, 60, 160, Math.max(20, 904 * progressPct), 20, 10, true, false);
     }
 
@@ -295,16 +358,17 @@ class XRVideoPlayer {
     ctx.font = '22px monospace';
     ctx.fillText(`${this.formatTime(currentTime)} / ${this.formatTime(duration)}`, 60, 220);
 
-    // 1. Play/Pause Button [x: 60..240, y: 260..350]
+    // 3. Play/Pause Button [x: 60..240, y: 260..350]
     const isPaused = this.videoElement ? this.videoElement.paused : true;
-    ctx.fillStyle = isPaused ? '#6366f1' : '#3b82f6';
-    this.drawRoundedRect(ctx, 60, 260, 180, 90, 16, true, false);
+    const isPlayHover = (this.currentHoveredButton === 'play_btn');
+    ctx.fillStyle = isPlayHover ? '#4f46e5' : (isPaused ? '#6366f1' : '#3b82f6');
+    this.drawRoundedRect(ctx, 60, 260, 180, 90, 16, true, isPlayHover, '#c7d2fe');
     ctx.fillStyle = '#ffffff';
     ctx.font = 'bold 24px sans-serif';
     ctx.textAlign = 'center';
     ctx.fillText(isPaused ? '▶ PLAY' : '⏸ PAUSE', 150, 314);
 
-    // 2. 3D Format Buttons
+    // 4. 3D Format Buttons
     const modes = [
       { id: '2d', label: '2D Flat', x: 260 },
       { id: '3d_sbs', label: '3D SBS', x: 400 },
@@ -315,29 +379,161 @@ class XRVideoPlayer {
 
     modes.forEach(m => {
       const isSelected = (this.mode3D === m.id);
-      ctx.fillStyle = isSelected ? '#8b5cf6' : '#26283b';
-      this.drawRoundedRect(ctx, m.x, 260, 120, 90, 14, true, true, isSelected ? '#a78bfa' : '#3f4260');
+      const isHovered = (this.currentHoveredButton === m.id);
+      ctx.fillStyle = isHovered ? '#7c3aed' : (isSelected ? '#8b5cf6' : '#26283b');
+      this.drawRoundedRect(ctx, m.x, 260, 120, 90, 14, true, true, isHovered ? '#ec4899' : (isSelected ? '#a78bfa' : '#3f4260'));
       ctx.fillStyle = '#ffffff';
       ctx.font = 'bold 19px sans-serif';
       ctx.fillText(m.label, m.x + 60, 314);
     });
 
-    // 3. Action Buttons: Exit VR & Exit Video [y: 380..460]
-    // Exit VR Button [x: 60..480]
-    ctx.fillStyle = '#374151';
-    this.drawRoundedRect(ctx, 60, 380, 430, 80, 14, true, true, '#4b5563');
+    // 5. Action Buttons: Re-Center, Exit VR & Close Video [y: 380..460]
+    // Re-Center Button [x: 60..320]
+    const isRecenterHover = (this.currentHoveredButton === 'recenter_btn');
+    ctx.fillStyle = isRecenterHover ? '#10b981' : '#059669';
+    this.drawRoundedRect(ctx, 60, 380, 260, 80, 14, true, true, isRecenterHover ? '#6ee7b7' : '#10b981');
     ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 22px sans-serif';
-    ctx.fillText('🚪 EXIT VR MODE', 275, 428);
+    ctx.font = 'bold 21px sans-serif';
+    ctx.fillText('🎯 RE-CENTER', 190, 428);
 
-    // Exit Video Button [x: 530..964]
-    ctx.fillStyle = '#dc2626';
-    this.drawRoundedRect(ctx, 530, 380, 434, 80, 14, true, true, '#ef4444');
+    // Exit VR Button [x: 340..640]
+    const isExitVrHover = (this.currentHoveredButton === 'exit_vr_btn');
+    ctx.fillStyle = isExitVrHover ? '#4b5563' : '#374151';
+    this.drawRoundedRect(ctx, 340, 380, 300, 80, 14, true, true, isExitVrHover ? '#9ca3af' : '#4b5563');
     ctx.fillStyle = '#ffffff';
-    ctx.fillText('✖ CLOSE VIDEO', 747, 428);
+    ctx.fillText('🚪 EXIT VR MODE', 490, 428);
+
+    // Close Video Button [x: 660..964]
+    const isCloseVidHover = (this.currentHoveredButton === 'close_video_btn');
+    ctx.fillStyle = isCloseVidHover ? '#ef4444' : '#dc2626';
+    this.drawRoundedRect(ctx, 660, 380, 304, 80, 14, true, true, isCloseVidHover ? '#fca5a5' : '#ef4444');
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText('✖ CLOSE VIDEO', 812, 428);
 
     ctx.textAlign = 'left';
     if (this.hudTexture) this.hudTexture.needsUpdate = true;
+  }
+
+  // ------------------------------------------------------------------
+  // Per-Frame Raycasting, Reticle Dot Positioning & Haptics Feedback
+  // ------------------------------------------------------------------
+  updateRaycastingAndHover() {
+    if (!this.hudVisible || !this.hudMesh || !this.scene) {
+      this.reticleDots.forEach(dot => { dot.visible = false; });
+      this.setLasersVisible(false);
+      return;
+    }
+
+    this.setLasersVisible(true);
+    let newHoveredBtn = null;
+
+    for (let i = 0; i < this.controllers.length; i++) {
+      const controller = this.controllers[i];
+      const reticleDot = this.reticleDots[i];
+      const laser = controller.getObjectByName("laserBeam");
+
+      const tempMatrix = new THREE.Matrix4();
+      tempMatrix.identity().extractRotation(controller.matrixWorld);
+
+      this.raycaster.ray.origin.setFromMatrixPosition(controller.matrixWorld);
+      this.raycaster.ray.direction.set(0, 0, -1).applyMatrix4(tempMatrix);
+
+      const intersects = this.raycaster.intersectObject(this.hudMesh);
+
+      if (intersects.length > 0) {
+        const hit = intersects[0];
+
+        // 1. Position Reticle Dot right at the 3D surface intersection point
+        reticleDot.position.copy(hit.point);
+        if (this.camera) {
+          reticleDot.lookAt(this.camera.position);
+        }
+        reticleDot.visible = true;
+
+        // 2. Trim laser line so it ends precisely at the Reticle Dot on the button
+        if (laser) {
+          const dist = hit.distance;
+          laser.scale.set(1, 1, dist / 5.0);
+        }
+
+        // 3. Map UV to HUD Canvas button ID
+        const uv = hit.uv;
+        const x = uv.x * 1024;
+        const y = (1 - uv.y) * 512;
+        const btnId = this.getButtonIdAt(x, y);
+
+        if (btnId) {
+          newHoveredBtn = btnId;
+        }
+      } else {
+        reticleDot.visible = false;
+        if (laser) laser.scale.set(1, 1, 1.0);
+      }
+    }
+
+    // Trigger short vibration pulse when laser enters a new button
+    if (newHoveredBtn && newHoveredBtn !== this.currentHoveredButton) {
+      this.currentHoveredButton = newHoveredBtn;
+      this.triggerHapticPulse(this.controllers[0], 0.45, 30);
+      this.updateVRHUDCanvas();
+    } else if (!newHoveredBtn && this.currentHoveredButton) {
+      this.currentHoveredButton = null;
+      this.updateVRHUDCanvas();
+    }
+  }
+
+  getButtonIdAt(x, y) {
+    if (x >= 934 && x <= 994 && y >= 35 && y <= 77) return 'close_btn';
+    if (x >= 60 && x <= 600 && y >= 35 && y <= 77) return 'drag_bar';
+    if (x >= 60 && x <= 240 && y >= 260 && y <= 350) return 'play_btn';
+    if (x >= 60 && x <= 964 && y >= 140 && y <= 230) return 'seek_bar';
+    if (y >= 260 && y <= 350) {
+      if (x >= 260 && x <= 380) return '2d';
+      if (x >= 400 && x <= 520) return '3d_sbs';
+      if (x >= 540 && x <= 660) return '3d_tb';
+      if (x >= 680 && x <= 800) return '3d_180_sbs';
+      if (x >= 820 && x <= 940) return '3d_360_sbs';
+    }
+    if (y >= 380 && y <= 460) {
+      if (x >= 60 && x <= 320) return 'recenter_btn';
+      if (x >= 340 && x <= 640) return 'exit_vr_btn';
+      if (x >= 660 && x <= 964) return 'close_video_btn';
+    }
+    return null;
+  }
+
+  // Handle Controller Select Start (Begins dragging if hitting Drag Bar)
+  onControllerSelectStart(controller) {
+    if (!this.hudMesh || !this.scene || !this.hudVisible) return;
+
+    const tempMatrix = new THREE.Matrix4();
+    tempMatrix.identity().extractRotation(controller.matrixWorld);
+
+    this.raycaster.ray.origin.setFromMatrixPosition(controller.matrixWorld);
+    this.raycaster.ray.direction.set(0, 0, -1).applyMatrix4(tempMatrix);
+
+    const intersects = this.raycaster.intersectObject(this.hudMesh);
+
+    if (intersects.length > 0) {
+      const uv = intersects[0].uv;
+      const x = uv.x * 1024;
+      const y = (1 - uv.y) * 512;
+
+      // Check if click was on Drag Bar [x: 60..600, y: 35..77]
+      if (x >= 60 && x <= 600 && y >= 35 && y <= 77) {
+        this.isDragging = true;
+        this.activeDragController = controller;
+        this.triggerHapticPulse(controller, 0.6, 40);
+      }
+    }
+  }
+
+  onControllerSelectEnd(controller) {
+    if (this.activeDragController === controller) {
+      this.isDragging = false;
+      this.activeDragController = null;
+      this.updateVRHUDCanvas();
+    }
   }
 
   onVRControllerSelect(controller) {
@@ -348,7 +544,6 @@ class XRVideoPlayer {
       return;
     }
 
-    // Perform Raycasting against In-VR 3D HUD Mesh
     const tempMatrix = new THREE.Matrix4();
     tempMatrix.identity().extractRotation(controller.matrixWorld);
 
@@ -362,21 +557,33 @@ class XRVideoPlayer {
       const x = uv.x * 1024;
       const y = (1 - uv.y) * 512; // Flip Y for canvas space
 
-      // 1. Play / Pause Button Click (x: 60..240, y: 260..350)
-      if (x >= 60 && x <= 240 && y >= 260 && y <= 350) {
+      // Trigger strong haptic pulse on click
+      this.triggerHapticPulse(controller, 0.85, 60);
+
+      // 1. Close Button [✖] Click (x: 934..994, y: 35..77)
+      if (x >= 934 && x <= 994 && y >= 35 && y <= 77) {
+        this.hideVRHUD();
+        return;
+      }
+      // 2. Drag Bar Click (handled by selectstart/end)
+      else if (x >= 60 && x <= 600 && y >= 35 && y <= 77) {
+        return;
+      }
+      // 3. Play / Pause Button Click (x: 60..240, y: 260..350)
+      else if (x >= 60 && x <= 240 && y >= 260 && y <= 350) {
         if (this.videoElement) {
           if (this.videoElement.paused) this.videoElement.play();
           else this.videoElement.pause();
         }
       }
-      // 2. Progress / Seek Line Click (x: 60..964, y: 140..230)
+      // 4. Progress / Seek Line Click (x: 60..964, y: 140..230)
       else if (x >= 60 && x <= 964 && y >= 140 && y <= 230) {
         if (this.videoElement && this.videoElement.duration) {
           const pct = (x - 60) / 904;
           this.videoElement.currentTime = pct * this.videoElement.duration;
         }
       }
-      // 3. 3D Mode Format Selection Buttons (y: 260..350)
+      // 5. 3D Mode Format Selection Buttons (y: 260..350)
       else if (y >= 260 && y <= 350) {
         if (x >= 260 && x <= 380) this.setProjectionMode('2d');
         else if (x >= 400 && x <= 520) this.setProjectionMode('3d_sbs');
@@ -384,12 +591,16 @@ class XRVideoPlayer {
         else if (x >= 680 && x <= 800) this.setProjectionMode('3d_180_sbs');
         else if (x >= 820 && x <= 940) this.setProjectionMode('3d_360_sbs');
       }
-      // 4. Exit VR Mode (x: 60..480, y: 380..460)
-      else if (x >= 60 && x <= 480 && y >= 380 && y <= 460) {
+      // 6. Re-Center Button Click (x: 60..320, y: 380..460)
+      else if (x >= 60 && x <= 320 && y >= 380 && y <= 460) {
+        this.recenterVRView();
+      }
+      // 7. Exit VR Mode Click (x: 340..640, y: 380..460)
+      else if (x >= 340 && x <= 640 && y >= 380 && y <= 460) {
         this.exitVR();
       }
-      // 5. Close Video (x: 530..964, y: 380..460)
-      else if (x >= 530 && x <= 964 && y >= 380 && y <= 460) {
+      // 8. Close Video Click (x: 660..964, y: 380..460)
+      else if (x >= 660 && x <= 964 && y >= 380 && y <= 460) {
         if (this.videoElement) this.videoElement.pause();
         this.exitVR();
         const closeBtn = document.getElementById('btn-close-player');
@@ -398,8 +609,47 @@ class XRVideoPlayer {
 
       this.showVRHUD();
     } else {
-      // Tapped outside HUD -> toggle HUD visibility
       this.showVRHUD();
+    }
+  }
+
+  // ------------------------------------------------------------------
+  // Re-Center VR View Functionality
+  // ------------------------------------------------------------------
+  recenterVRView() {
+    if (!this.camera) return;
+
+    // Get Head position and direction
+    const headPos = new THREE.Vector3();
+    const headDir = new THREE.Vector3();
+
+    this.camera.getWorldPosition(headPos);
+    this.camera.getWorldDirection(headDir);
+
+    // Flatten headDir to horizontal plane (y = 0)
+    headDir.y = 0;
+    headDir.normalize();
+
+    // 1. Position video screen 3 meters ahead at eye level
+    const videoPos = headPos.clone().add(headDir.clone().multiplyScalar(3.0));
+    videoPos.y = headPos.y;
+
+    if (this.leftMesh) {
+      this.leftMesh.position.copy(videoPos);
+      this.leftMesh.lookAt(headPos.x, videoPos.y, headPos.z);
+    }
+    if (this.rightMesh) {
+      this.rightMesh.position.copy(videoPos);
+      this.rightMesh.lookAt(headPos.x, videoPos.y, headPos.z);
+    }
+
+    // 2. Position HUD panel 1.8 meters ahead slightly below eye level
+    const hudPos = headPos.clone().add(headDir.clone().multiplyScalar(1.8));
+    hudPos.y = headPos.y - 0.45;
+
+    if (this.hudMesh) {
+      this.hudMesh.position.copy(hudPos);
+      this.hudMesh.lookAt(headPos.x, hudPos.y + 0.3, headPos.z);
     }
   }
 
@@ -407,9 +657,31 @@ class XRVideoPlayer {
     if (this.videoTexture) {
       this.videoTexture.needsUpdate = true;
     }
-    if (this.hudVisible && this.hudTexture) {
-      this.updateVRHUDCanvas();
+
+    // Update laser line trimming, reticle dot position, and haptics hover
+    this.updateRaycastingAndHover();
+
+    // Handle smooth dragging of HUD panel with active VR controller
+    if (this.isDragging && this.activeDragController && this.hudMesh) {
+      const controllerPos = new THREE.Vector3();
+      const controllerDir = new THREE.Vector3();
+      const tempMatrix = new THREE.Matrix4();
+
+      this.activeDragController.getWorldPosition(controllerPos);
+      tempMatrix.identity().extractRotation(this.activeDragController.matrixWorld);
+      controllerDir.set(0, 0, -1).applyMatrix4(tempMatrix);
+
+      const targetHudPos = controllerPos.clone().add(controllerDir.clone().multiplyScalar(1.5));
+      this.hudMesh.position.copy(targetHudPos);
+
+      // Rotate HUD panel to face user camera
+      if (this.camera) {
+        const camPos = new THREE.Vector3();
+        this.camera.getWorldPosition(camPos);
+        this.hudMesh.lookAt(camPos.x, targetHudPos.y, camPos.z);
+      }
     }
+
     this.renderer.render(this.scene, this.camera);
   }
 
@@ -424,6 +696,9 @@ class XRVideoPlayer {
     }
     this.xrSession = null;
     this.hudMesh = null;
+    this.isDragging = false;
+    this.currentHoveredButton = null;
+    this.reticleDots.forEach(dot => { dot.visible = false; });
   }
 
   exitVR() {
