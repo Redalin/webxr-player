@@ -4,10 +4,10 @@ import subprocess
 import json
 import re
 from pathlib import Path
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 from concurrent.futures import ThreadPoolExecutor
 
-VIDEO_EXTENSIONS = {'.mp4', '.mkv', '.webm', '.avi', '.mov', '.m4v', '.ts', '.wmv'}
+VIDEO_EXTENSIONS = {'.mp4', '.mkv', '.webm', '.avi', '.mov', '.m4v', '.ts', '.wmv', '.flv', '.vob', '.divx'}
 THUMBNAIL_DIR = Path(__file__).parent.parent / ".thumbnails"
 THUMBNAIL_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -87,6 +87,8 @@ class MediaService:
             "height": 0,
             "duration": 0,
             "formatted_duration": "00:00",
+            "video_codec": "",
+            "audio_codec": "",
             "mode_3d": MediaService.detect_3d_mode(file_path.name, 0, 0)
         }
 
@@ -98,17 +100,101 @@ class MediaService:
             info["formatted_duration"] = MediaService.format_duration(duration)
 
             for stream in ffprobe_data.get("streams", []):
-                if stream.get("codec_type") == "video":
+                codec_type = stream.get("codec_type")
+                if codec_type == "video" and info["width"] == 0:
                     width = int(stream.get("width", 0))
                     height = int(stream.get("height", 0))
                     info["width"] = width
                     info["height"] = height
                     info["codec"] = stream.get("codec_name", "")
+                    info["video_codec"] = stream.get("codec_name", "")
                     info["mode_3d"] = MediaService.detect_3d_mode(file_path.name, width, height)
-                    break
+                elif codec_type == "audio" and not info["audio_codec"]:
+                    info["audio_codec"] = stream.get("codec_name", "")
+
+        needs_transcode, _, _ = MediaService.should_transcode(path_str, info)
+        info["needs_transcode"] = needs_transcode
 
         MediaService._metadata_cache[cache_key] = info
         return info
+
+    @staticmethod
+    def should_transcode(video_path: str, info_dict: Optional[Dict[str, Any]] = None) -> Tuple[bool, bool, bool]:
+        """
+        Returns (needs_transcode, copy_video, copy_audio)
+        - needs_transcode: True if container or codecs require FFmpeg remuxing/transcoding
+        - copy_video: True if video stream (e.g. H.264 / HEVC) can be copied without re-encoding (-c:v copy)
+        - copy_audio: True if audio stream (e.g. AAC / MP3) can be copied without re-encoding (-c:a copy)
+        """
+        ext = os.path.splitext(video_path)[1].lower()
+        info = info_dict if info_dict is not None else MediaService.get_video_info(Path(video_path))
+
+        video_codec = info.get("video_codec", "").lower()
+        audio_codec = info.get("audio_codec", "").lower()
+
+        # Incompatible video codecs that MUST be re-encoded to H.264
+        incompatible_video = video_codec in {'mpeg4', 'msmpeg4v3', 'wmv3', 'wmv2', 'vc1', 'mjpeg', 'mpeg2video', 'mpeg1video', 'divx', 'xvid'}
+        
+        # Incompatible audio codecs that MUST be converted to AAC
+        incompatible_audio = audio_codec in {'ac3', 'eac3', 'dts', 'dca', 'truehd', 'mlp', 'pcm_s16le', 'pcm_s24le', 'wma', 'wmav2'} or not audio_codec
+
+        # Incompatible containers (e.g. MKV, AVI, WMV) that require MP4 container packaging
+        incompatible_container = ext in {'.mkv', '.avi', '.wmv', '.flv', '.ts', '.vob', '.divx'}
+
+        needs_transcode = incompatible_video or incompatible_audio or incompatible_container
+
+        # Can we copy video without re-encoding? (e.g. video is H.264 / HEVC / VP9)
+        copy_video = not incompatible_video and video_codec in {'h264', 'hevc', 'vp9', 'av1', 'avc1', ''}
+
+        # Can we copy audio without re-encoding? (e.g. audio is AAC / MP3 / Opus)
+        copy_audio = not incompatible_audio and audio_codec in {'aac', 'mp3', 'opus'}
+
+        return (needs_transcode, copy_video, copy_audio)
+
+    @staticmethod
+    def transcode_stream_generator(video_path: str):
+        """
+        Streams video/audio using FFmpeg outputting fragmented MP4 directly to stdout pipe.
+        Fast, on-the-fly transcoding and container remuxing for MKV, AVI, AC3, DTS, MPEG4 files.
+        """
+        needs_transcode, copy_video, copy_audio = MediaService.should_transcode(video_path)
+
+        cmd = ["ffmpeg", "-loglevel", "error", "-i", video_path]
+
+        if copy_video:
+            cmd.extend(["-c:v", "copy"])
+        else:
+            # Transcode video to H.264 ultrafast for real-time smooth playback
+            cmd.extend(["-c:v", "libx264", "-preset", "ultrafast", "-crf", "23", "-pix_fmt", "yuv420p"])
+
+        if copy_audio:
+            cmd.extend(["-c:a", "copy"])
+        else:
+            # Transcode audio to AAC 192k for universal web browser audio support
+            cmd.extend(["-c:a", "aac", "-b:a", "192k", "-ac", "2"])
+
+        # Output fragmented MP4 directly to stdout pipe
+        cmd.extend([
+            "-f", "mp4",
+            "-movflags", "frag_keyframe+empty_moov+default_base_moof",
+            "pipe:1"
+        ])
+
+        process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, bufsize=1024 * 1024)
+
+        try:
+            while True:
+                chunk = process.stdout.read(64 * 1024)
+                if not chunk:
+                    break
+                yield chunk
+        finally:
+            if process.poll() is None:
+                try:
+                    process.terminate()
+                    process.wait(timeout=2)
+                except Exception:
+                    process.kill()
 
     @staticmethod
     def run_ffprobe(video_path: str) -> Optional[Dict[str, Any]]:

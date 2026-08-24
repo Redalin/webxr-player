@@ -54,17 +54,32 @@ async def get_thumbnail(path: str = Query(...)):
     )
 
 @app.get("/api/stream")
-async def stream_video(request: Request, path: str = Query(...)):
+async def stream_video(request: Request, path: str = Query(...), force_transcode: bool = Query(False)):
     if not os.path.exists(path) or not os.path.isfile(path):
         raise HTTPException(status_code=404, detail="Video file not found")
 
+    needs_transcode, _, _ = MediaService.should_transcode(path)
+
+    # Route incompatible formats (e.g. MKV with AC3/DTS audio, AVI MPEG4, WMV) through FFmpeg on-the-fly streaming
+    if force_transcode or needs_transcode:
+        headers = {
+            "Content-Type": "video/mp4",
+            "Accept-Ranges": "none",
+            "Cache-Control": "no-cache",
+        }
+        return StreamingResponse(
+            MediaService.transcode_stream_generator(path),
+            media_type="video/mp4",
+            headers=headers
+        )
+
+    # Native direct Range Streaming for browser-compatible files (.mp4 with H.264/AAC)
     file_size = os.path.getsize(path)
     range_header = request.headers.get('range')
 
     if not range_header:
         return FileResponse(path, media_type=get_media_type(path))
 
-    # Parse Range Header (e.g. bytes=0-1024)
     range_match = range_header.replace('bytes=', '').split('-')
     start = int(range_match[0]) if range_match[0] else 0
     end = int(range_match[1]) if len(range_match) > 1 and range_match[1] else file_size - 1
@@ -79,7 +94,7 @@ async def stream_video(request: Request, path: str = Query(...)):
             file.seek(start_pos)
             bytes_left = bytes_to_read
             while bytes_left > 0:
-                chunk = file.read(min(1024 * 1024, bytes_left)) # 1MB chunk size
+                chunk = file.read(min(1024 * 1024, bytes_left))
                 if not chunk:
                     break
                 bytes_left -= len(chunk)

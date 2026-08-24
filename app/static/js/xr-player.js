@@ -624,7 +624,8 @@ class XRVideoPlayer {
 
       this.showVRHUD();
     } else {
-      this.showVRHUD();
+      // Clicked away from control panel into 3D VR space -> hide control panel
+      this.hideVRHUD();
     }
   }
 
