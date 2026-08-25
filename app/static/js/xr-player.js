@@ -31,6 +31,9 @@ class XRVideoPlayer {
     this.lastJoystickJogTime = 0;
     this.joystickJogActive = false;
 
+    // VR 3D Format Dropdown Menu state
+    this.formatMenuOpen = false;
+
     this.checkXRSupport();
   }
 
@@ -367,82 +370,111 @@ class XRVideoPlayer {
     ctx.font = '22px monospace';
     ctx.fillText(`${this.formatTime(currentTime)} / ${this.formatTime(duration)}`, 60, 220);
 
-    // 3. Rewind -30s Button [x: 60..150, y: 260..350]
-    const isSkipBackHover = (this.currentHoveredButton === 'skip_back_btn');
-    ctx.fillStyle = isSkipBackHover ? '#4b5563' : '#374151';
-    this.drawRoundedRect(ctx, 60, 260, 90, 90, 14, true, isSkipBackHover, '#9ca3af');
-    ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 19px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText('⏪-30', 105, 314);
-
-    // Play/Pause Button [x: 165..315, y: 260..350]
+    // 3. Playback Controls Row [y: 200..256] (Height 56px - compact & smaller)
+    // Play/Pause Button [x: 60..150] (Far Left)
     const isPaused = this.videoElement ? this.videoElement.paused : true;
     const isPlayHover = (this.currentHoveredButton === 'play_btn');
     ctx.fillStyle = isPlayHover ? '#4f46e5' : (isPaused ? '#6366f1' : '#3b82f6');
-    this.drawRoundedRect(ctx, 165, 260, 150, 90, 16, true, isPlayHover, '#c7d2fe');
+    this.drawRoundedRect(ctx, 60, 200, 90, 56, 12, true, isPlayHover, '#c7d2fe');
     ctx.fillStyle = '#ffffff';
     ctx.font = 'bold 22px sans-serif';
-    ctx.fillText(isPaused ? '▶' : '⏸', 240, 314);
+    ctx.textAlign = 'center';
+    ctx.fillText(isPaused ? '▶' : '⏸', 105, 236);
 
-    // Fast-Forward +30s Button [x: 330..420, y: 260..350]
+    // Rewind -30s Button [x: 165..255] (Middle)
+    const isSkipBackHover = (this.currentHoveredButton === 'skip_back_btn');
+    ctx.fillStyle = isSkipBackHover ? '#4b5563' : '#374151';
+    this.drawRoundedRect(ctx, 165, 200, 90, 56, 12, true, isSkipBackHover, '#9ca3af');
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 17px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('⏪-30', 210, 235);
+
+    // Fast-Forward +30s Button [x: 270..360] (Right)
     const isSkipFwdHover = (this.currentHoveredButton === 'skip_forward_btn');
     ctx.fillStyle = isSkipFwdHover ? '#4b5563' : '#374151';
-    this.drawRoundedRect(ctx, 330, 260, 90, 90, 14, true, isSkipFwdHover, '#9ca3af');
+    this.drawRoundedRect(ctx, 270, 200, 90, 56, 12, true, isSkipFwdHover, '#9ca3af');
     ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 19px sans-serif';
-    ctx.fillText('⏩+30', 375, 314);
+    ctx.font = 'bold 17px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('⏩+30', 315, 235);
 
-    // 4. 3D Format Buttons [x: 440..960, y: 260..350]
-    const modes = [
-      { id: '2d', label: '2D Flat', x: 440 },
-      { id: '3d_sbs', label: '3D SBS', x: 546 },
-      { id: '3d_tb', label: '3D TB', x: 652 },
-      { id: '3d_180_sbs', label: '180° VR', x: 758 },
-      { id: '3d_360_sbs', label: '360° VR', x: 864 }
-    ];
+    // Gear Icon ⚙ 3D Format Menu Button [x: 375..525]
+    const isGearHover = (this.currentHoveredButton === 'gear_btn');
+    ctx.fillStyle = isGearHover ? '#7c3aed' : (this.formatMenuOpen ? '#8b5cf6' : '#26283b');
+    this.drawRoundedRect(ctx, 375, 200, 150, 56, 12, true, true, isGearHover ? '#ec4899' : (this.formatMenuOpen ? '#a78bfa' : '#3f4260'));
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 17px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('⚙ FORMAT', 450, 235);
 
-    modes.forEach(m => {
-      const isSelected = (this.mode3D === m.id);
-      const isHovered = (this.currentHoveredButton === m.id);
-      ctx.fillStyle = isHovered ? '#7c3aed' : (isSelected ? '#8b5cf6' : '#26283b');
-      this.drawRoundedRect(ctx, m.x, 260, 96, 90, 14, true, true, isHovered ? '#ec4899' : (isSelected ? '#a78bfa' : '#3f4260'));
-      ctx.fillStyle = '#ffffff';
-      ctx.font = 'bold 18px sans-serif';
-      ctx.fillText(m.label, m.x + 48, 314);
-    });
-
-    // 5. Action Buttons: Mute, Re-Center, Exit VR & Close Video [y: 380..460]
-    // Mute Button [x: 60..240]
+    // 4. Action Buttons Row [y: 275..331] (Height 56px - compact & smaller)
+    // Mute Button [x: 60..180]
     const isMuted = this.videoElement ? this.videoElement.muted : false;
     const isMuteHover = (this.currentHoveredButton === 'mute_btn');
     ctx.fillStyle = isMuteHover ? '#4b5563' : (isMuted ? '#ef4444' : '#374151');
-    this.drawRoundedRect(ctx, 60, 380, 180, 80, 14, true, true, isMuteHover ? '#9ca3af' : '#4b5563');
+    this.drawRoundedRect(ctx, 60, 275, 120, 56, 12, true, true, isMuteHover ? '#9ca3af' : '#4b5563');
     ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 20px sans-serif';
-    ctx.fillText(isMuted ? '🔇' : '🔊', 150, 428);
+    ctx.font = 'bold 18px sans-serif';
+    ctx.fillText(isMuted ? '🔇 MUTE' : '🔊 MUTE', 120, 310);
 
-    // Re-Center Button [x: 260..480]
+    // Re-Center Button [x: 195..335]
     const isRecenterHover = (this.currentHoveredButton === 'recenter_btn');
     ctx.fillStyle = isRecenterHover ? '#10b981' : '#059669';
-    this.drawRoundedRect(ctx, 260, 380, 220, 80, 14, true, true, isRecenterHover ? '#6ee7b7' : '#10b981');
+    this.drawRoundedRect(ctx, 195, 275, 140, 56, 12, true, true, isRecenterHover ? '#6ee7b7' : '#10b981');
     ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 20px sans-serif';
-    ctx.fillText('🎯 CENTER', 370, 428);
+    ctx.font = 'bold 17px sans-serif';
+    ctx.fillText('🎯 CENTER', 265, 310);
 
-    // Exit VR Button [x: 500..720]
+    // Exit VR Button [x: 350..490]
     const isExitVrHover = (this.currentHoveredButton === 'exit_vr_btn');
     ctx.fillStyle = isExitVrHover ? '#4b5563' : '#374151';
-    this.drawRoundedRect(ctx, 500, 380, 220, 80, 14, true, true, isExitVrHover ? '#9ca3af' : '#4b5563');
+    this.drawRoundedRect(ctx, 350, 275, 140, 56, 12, true, true, isExitVrHover ? '#9ca3af' : '#4b5563');
     ctx.fillStyle = '#ffffff';
-    ctx.fillText('🚪 EXIT', 610, 428);
+    ctx.font = 'bold 17px sans-serif';
+    ctx.fillText('🚪 EXIT VR', 420, 310);
 
-    // Close Video Button [x: 740..964]
+    // Close Video Button [x: 505..645]
     const isCloseVidHover = (this.currentHoveredButton === 'close_video_btn');
     ctx.fillStyle = isCloseVidHover ? '#ef4444' : '#dc2626';
-    this.drawRoundedRect(ctx, 740, 380, 224, 80, 14, true, true, isCloseVidHover ? '#fca5a5' : '#ef4444');
+    this.drawRoundedRect(ctx, 505, 275, 140, 56, 12, true, true, isCloseVidHover ? '#fca5a5' : '#ef4444');
     ctx.fillStyle = '#ffffff';
-    ctx.fillText('✖ CLOSE', 852, 428);
+    ctx.font = 'bold 17px sans-serif';
+    ctx.fillText('✖ CLOSE', 575, 310);
+
+    // 5. Pop-up 3D Format Dropdown Menu List (When formatMenuOpen is true)
+    if (this.formatMenuOpen) {
+      // Floating glassmorphism menu card
+      ctx.fillStyle = 'rgba(14, 15, 26, 0.98)';
+      this.drawRoundedRect(ctx, 375, 60, 290, 320, 16, true, true, '#6366f1');
+
+      ctx.fillStyle = '#9ca3af';
+      ctx.font = 'bold 14px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('SELECT 3D FORMAT', 520, 85);
+
+      const options = [
+        { id: 'fmt_2d', mode: '2d', label: '2D Flat Screen' },
+        { id: 'fmt_3d_sbs', mode: '3d_sbs', label: '3D Side-by-Side (SBS)' },
+        { id: 'fmt_3d_tb', mode: '3d_tb', label: '3D Top-Bottom (TB)' },
+        { id: 'fmt_3d_180_sbs', mode: '3d_180_sbs', label: '3D 180° VR Hemisphere' },
+        { id: 'fmt_3d_360_sbs', mode: '3d_360_sbs', label: '3D 360° VR Sphere' }
+      ];
+
+      options.forEach((opt, idx) => {
+        const itemY = 100 + idx * 52;
+        const isSelected = (this.mode3D === opt.mode);
+        const isHovered = (this.currentHoveredButton === opt.id);
+
+        ctx.fillStyle = isHovered ? '#7c3aed' : (isSelected ? '#6366f1' : '#26283b');
+        this.drawRoundedRect(ctx, 385, itemY, 270, 46, 10, true, true, isHovered ? '#ec4899' : (isSelected ? '#818cf8' : '#3f4260'));
+
+        ctx.fillStyle = '#ffffff';
+        ctx.font = isSelected ? 'bold 16px sans-serif' : '15px sans-serif';
+        ctx.textAlign = 'left';
+        ctx.fillText(isSelected ? `✓  ${opt.label}` : opt.label, 400, itemY + 28);
+      });
+    }
 
     ctx.textAlign = 'left';
     if (this.hudTexture) this.hudTexture.needsUpdate = true;
@@ -517,25 +549,38 @@ class XRVideoPlayer {
   }
 
   getButtonIdAt(x, y) {
-    if (x >= 934 && x <= 994 && y >= 35 && y <= 77) return 'close_btn';
-    if (x >= 60 && x <= 600 && y >= 35 && y <= 77) return 'drag_bar';
-    if (x >= 60 && x <= 964 && y >= 140 && y <= 230) return 'seek_bar';
-    if (y >= 260 && y <= 350) {
-      if (x >= 60 && x <= 150) return 'skip_back_btn';
-      if (x >= 165 && x <= 315) return 'play_btn';
-      if (x >= 330 && x <= 420) return 'skip_forward_btn';
-      if (x >= 440 && x <= 536) return '2d';
-      if (x >= 546 && x <= 642) return '3d_sbs';
-      if (x >= 652 && x <= 748) return '3d_tb';
-      if (x >= 758 && x <= 854) return '3d_180_sbs';
-      if (x >= 864 && x <= 960) return '3d_360_sbs';
+    if (x >= 914 && x <= 964 && y >= 35 && y <= 77) return 'close_btn';
+    if (x >= 60 && x <= 580 && y >= 35 && y <= 77) return 'drag_bar';
+
+    // Format Dropdown Options (when formatMenuOpen is true)
+    if (this.formatMenuOpen) {
+      if (x >= 375 && x <= 665) {
+        if (y >= 100 && y <= 146) return 'fmt_2d';
+        if (y >= 152 && y <= 198) return 'fmt_3d_sbs';
+        if (y >= 204 && y <= 250) return 'fmt_3d_tb';
+        if (y >= 256 && y <= 302) return 'fmt_3d_180_sbs';
+        if (y >= 308 && y <= 354) return 'fmt_3d_360_sbs';
+      }
     }
-    if (y >= 380 && y <= 460) {
-      if (x >= 60 && x <= 240) return 'mute_btn';
-      if (x >= 260 && x <= 480) return 'recenter_btn';
-      if (x >= 500 && x <= 720) return 'exit_vr_btn';
-      if (x >= 740 && x <= 964) return 'close_video_btn';
+
+    if (x >= 60 && x <= 964 && y >= 110 && y <= 160) return 'seek_bar';
+
+    // Row 3 Playback Controls [y: 200..256]
+    if (y >= 200 && y <= 256) {
+      if (x >= 60 && x <= 150) return 'play_btn';
+      if (x >= 165 && x <= 255) return 'skip_back_btn';
+      if (x >= 270 && x <= 360) return 'skip_forward_btn';
+      if (x >= 375 && x <= 525) return 'gear_btn';
     }
+
+    // Row 4 Action Buttons [y: 275..331]
+    if (y >= 275 && y <= 331) {
+      if (x >= 60 && x <= 180) return 'mute_btn';
+      if (x >= 195 && x <= 335) return 'recenter_btn';
+      if (x >= 350 && x <= 490) return 'exit_vr_btn';
+      if (x >= 505 && x <= 645) return 'close_video_btn';
+    }
+
     return null;
   }
 
@@ -597,39 +642,40 @@ class XRVideoPlayer {
       // Trigger strong haptic pulse on click
       this.triggerHapticPulse(controller, 0.85, 60);
 
-      // 1. Close Button [✖] Click (x: 934..994, y: 35..77)
-      if (x >= 934 && x <= 994 && y >= 35 && y <= 77) {
+      const btnId = this.getButtonIdAt(x, y);
+
+      if (btnId === 'close_btn') {
         this.hideVRHUD();
         return;
-      }
-      // 2. Drag Bar Click (handled by selectstart/end)
-      else if (x >= 60 && x <= 600 && y >= 35 && y <= 77) {
+      } else if (btnId === 'drag_bar') {
         return;
-      }
-      // 3. Skip Back -30s Click (x: 60..150, y: 260..350)
-      else if (x >= 60 && x <= 150 && y >= 260 && y <= 350) {
-        if (window.seekToTime && window.getCurrentTime) {
-          window.seekToTime(window.getCurrentTime() - 30);
-        }
-      }
-      // 4. Play / Pause Button Click (x: 165..315, y: 260..350)
-      else if (x >= 165 && x <= 315 && y >= 260 && y <= 350) {
+      } else if (btnId === 'gear_btn') {
+        this.formatMenuOpen = !this.formatMenuOpen;
+        this.updateVRHUDCanvas();
+        return;
+      } else if (btnId && btnId.startsWith('fmt_')) {
+        const mode = btnId.replace('fmt_', '');
+        this.setProjectionMode(mode);
+        this.formatMenuOpen = false;
+        this.updateVRHUDCanvas();
+        return;
+      } else if (btnId === 'play_btn') {
         if (this.videoElement) {
           if (this.videoElement.paused) this.videoElement.play();
           else this.videoElement.pause();
         }
-      }
-      // 5. Skip Forward +30s Click (x: 330..420, y: 260..350)
-      else if (x >= 330 && x <= 420 && y >= 260 && y <= 350) {
+      } else if (btnId === 'skip_back_btn') {
+        if (window.seekToTime && window.getCurrentTime) {
+          window.seekToTime(window.getCurrentTime() - 30);
+        }
+      } else if (btnId === 'skip_forward_btn') {
         if (window.seekToTime && window.getCurrentTime) {
           window.seekToTime(window.getCurrentTime() + 30);
         }
-      }
-      // 6. Progress / Seek Line Click (x: 60..964, y: 140..230)
-      else if (x >= 60 && x <= 964 && y >= 140 && y <= 230) {
+      } else if (btnId === 'seek_bar') {
         const total = window.getTotalDuration ? window.getTotalDuration() : (this.videoElement ? this.videoElement.duration : 0);
         if (total > 0) {
-          const pct = (x - 60) / 904;
+          const pct = Math.min(1, Math.max(0, (x - 60) / 904));
           const targetTime = pct * total;
           if (window.seekToTime) {
             window.seekToTime(targetTime);
@@ -637,28 +683,21 @@ class XRVideoPlayer {
             this.videoElement.currentTime = targetTime;
           }
         }
-      }
-      // 7. 3D Mode Format Selection Buttons (y: 260..350)
-      else if (y >= 260 && y <= 350) {
-        if (x >= 440 && x <= 536) this.setProjectionMode('2d');
-        else if (x >= 546 && x <= 642) this.setProjectionMode('3d_sbs');
-        else if (x >= 652 && x <= 748) this.setProjectionMode('3d_tb');
-        else if (x >= 758 && x <= 854) this.setProjectionMode('3d_180_sbs');
-        else if (x >= 864 && x <= 960) this.setProjectionMode('3d_360_sbs');
-      }
-      // 8. Action Buttons (y: 380..460)
-      else if (y >= 380 && y <= 460) {
-        if (x >= 60 && x <= 240) {
-          if (this.videoElement) this.videoElement.muted = !this.videoElement.muted;
-        } else if (x >= 260 && x <= 480) {
-          this.recenterVRView();
-        } else if (x >= 500 && x <= 720) {
-          this.exitVR();
-        } else if (x >= 740 && x <= 964) {
-          if (this.videoElement) this.videoElement.pause();
-          this.exitVR();
-          const closeBtn = document.getElementById('btn-close-player');
-          if (closeBtn) closeBtn.click();
+      } else if (btnId === 'mute_btn') {
+        if (this.videoElement) this.videoElement.muted = !this.videoElement.muted;
+      } else if (btnId === 'recenter_btn') {
+        this.recenterVRView();
+      } else if (btnId === 'exit_vr_btn') {
+        this.exitVR();
+      } else if (btnId === 'close_video_btn') {
+        if (this.videoElement) this.videoElement.pause();
+        this.exitVR();
+        const closeBtn = document.getElementById('btn-close-player');
+        if (closeBtn) closeBtn.click();
+      } else {
+        if (this.formatMenuOpen) {
+          this.formatMenuOpen = false;
+          this.updateVRHUDCanvas();
         }
       }
 
