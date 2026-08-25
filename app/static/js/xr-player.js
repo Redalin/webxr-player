@@ -374,7 +374,7 @@ class XRVideoPlayer {
     ctx.fillStyle = '#ffffff';
     ctx.font = 'bold 19px sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText('⏪-30s', 105, 314);
+    ctx.fillText('⏪-30', 105, 314);
 
     // Play/Pause Button [x: 165..315, y: 260..350]
     const isPaused = this.videoElement ? this.videoElement.paused : true;
@@ -383,7 +383,7 @@ class XRVideoPlayer {
     this.drawRoundedRect(ctx, 165, 260, 150, 90, 16, true, isPlayHover, '#c7d2fe');
     ctx.fillStyle = '#ffffff';
     ctx.font = 'bold 22px sans-serif';
-    ctx.fillText(isPaused ? '▶ PLAY' : '⏸ PAUSE', 240, 314);
+    ctx.fillText(isPaused ? '▶' : '⏸', 240, 314);
 
     // Fast-Forward +30s Button [x: 330..420, y: 260..350]
     const isSkipFwdHover = (this.currentHoveredButton === 'skip_forward_btn');
@@ -391,7 +391,7 @@ class XRVideoPlayer {
     this.drawRoundedRect(ctx, 330, 260, 90, 90, 14, true, isSkipFwdHover, '#9ca3af');
     ctx.fillStyle = '#ffffff';
     ctx.font = 'bold 19px sans-serif';
-    ctx.fillText('⏩+30s', 375, 314);
+    ctx.fillText('⏩+30', 375, 314);
 
     // 4. 3D Format Buttons [x: 440..960, y: 260..350]
     const modes = [
@@ -420,7 +420,7 @@ class XRVideoPlayer {
     this.drawRoundedRect(ctx, 60, 380, 180, 80, 14, true, true, isMuteHover ? '#9ca3af' : '#4b5563');
     ctx.fillStyle = '#ffffff';
     ctx.font = 'bold 20px sans-serif';
-    ctx.fillText(isMuted ? '🔇 UNMUTE' : '🔊 MUTE', 150, 428);
+    ctx.fillText(isMuted ? '🔇' : '🔊', 150, 428);
 
     // Re-Center Button [x: 260..480]
     const isRecenterHover = (this.currentHoveredButton === 'recenter_btn');
@@ -428,14 +428,14 @@ class XRVideoPlayer {
     this.drawRoundedRect(ctx, 260, 380, 220, 80, 14, true, true, isRecenterHover ? '#6ee7b7' : '#10b981');
     ctx.fillStyle = '#ffffff';
     ctx.font = 'bold 20px sans-serif';
-    ctx.fillText('🎯 RE-CENTER', 370, 428);
+    ctx.fillText('🎯 CENTER', 370, 428);
 
     // Exit VR Button [x: 500..720]
     const isExitVrHover = (this.currentHoveredButton === 'exit_vr_btn');
     ctx.fillStyle = isExitVrHover ? '#4b5563' : '#374151';
     this.drawRoundedRect(ctx, 500, 380, 220, 80, 14, true, true, isExitVrHover ? '#9ca3af' : '#4b5563');
     ctx.fillStyle = '#ffffff';
-    ctx.fillText('🚪 EXIT VR', 610, 428);
+    ctx.fillText('🚪 EXIT', 610, 428);
 
     // Close Video Button [x: 740..964]
     const isCloseVidHover = (this.currentHoveredButton === 'close_video_btn');
