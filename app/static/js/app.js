@@ -102,18 +102,24 @@ document.addEventListener('DOMContentLoaded', () => {
   // Initialize
   loadDirectory('/media');
 
-  // Event Listeners
-  btnLoadPath.addEventListener('click', () => {
-    const path = serverPathInput.value.trim();
-    if (path) loadDirectory(path);
-  });
+  // Event Listeners for optional top bar elements
+  if (btnLoadPath) {
+    btnLoadPath.addEventListener('click', () => {
+      if (serverPathInput) {
+        const path = serverPathInput.value.trim();
+        if (path) loadDirectory(path);
+      }
+    });
+  }
 
-  serverPathInput.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') {
-      const path = serverPathInput.value.trim();
-      if (path) loadDirectory(path);
-    }
-  });
+  if (serverPathInput) {
+    serverPathInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        const path = serverPathInput.value.trim();
+        if (path) loadDirectory(path);
+      }
+    });
+  }
 
   // Favorites / Quick Locations
   let favoritePaths = [];
@@ -124,7 +130,14 @@ document.addEventListener('DOMContentLoaded', () => {
     favoritePaths = ['/media', '/app/media', '/app'];
   }
 
-  const btnToggleFavorite = document.getElementById('btn-toggle-favorite');
+  let btnToggleFavorite = document.getElementById('btn-toggle-favorite');
+  if (!btnToggleFavorite) {
+    btnToggleFavorite = document.createElement('button');
+    btnToggleFavorite.id = 'btn-toggle-favorite';
+    btnToggleFavorite.className = 'btn-star-icon';
+    btnToggleFavorite.title = 'Save to Quick Locations';
+    btnToggleFavorite.innerHTML = '⭐';
+  }
 
   function saveFavorites() {
     try {
@@ -158,7 +171,7 @@ document.addEventListener('DOMContentLoaded', () => {
       `;
 
       wrapper.querySelector('.preset-chip').addEventListener('click', () => {
-        serverPathInput.value = path;
+        if (serverPathInput) serverPathInput.value = path;
         loadDirectory(path);
       });
 
@@ -186,88 +199,114 @@ document.addEventListener('DOMContentLoaded', () => {
 
   renderFavorites();
 
-  // Local File Picker
-  localFileInput.addEventListener('change', (e) => {
-    const files = Array.from(e.target.files);
-    if (files.length > 0) {
-      handleLocalFiles(files);
-    }
-  });
-
-  // Search & Filters
-  videoSearchInput.addEventListener('input', renderVideoGrid);
-  filter3DMode.addEventListener('change', renderVideoGrid);
-
-  // FS Modal Events
-  btnBrowseFS.addEventListener('click', () => {
-    openFSModal(currentPath);
-  });
-
-  modalCloseBtn.addEventListener('click', () => {
-    fsModal.classList.remove('active');
-  });
-
-  modalSelectBtn.addEventListener('click', () => {
-    fsModal.classList.remove('active');
-    serverPathInput.value = modalCurrentPath;
-    loadDirectory(modalCurrentPath);
-  });
-
-  modalParentBtn.addEventListener('click', () => {
-    fetchBrowseData(modalCurrentPath).then(data => {
-      if (data.parent) {
-        openFSModal(data.parent);
+  // Local File Picker (Optional)
+  if (localFileInput) {
+    localFileInput.addEventListener('change', (e) => {
+      const files = Array.from(e.target.files);
+      if (files.length > 0) {
+        handleLocalFiles(files);
       }
     });
-  });
+  }
+
+  // Search & Filters
+  if (videoSearchInput) {
+    videoSearchInput.addEventListener('input', renderVideoGrid);
+  }
+  if (filter3DMode) {
+    filter3DMode.addEventListener('change', renderVideoGrid);
+  }
+
+  // FS Modal Events (Optional)
+  if (btnBrowseFS) {
+    btnBrowseFS.addEventListener('click', () => {
+      openFSModal(currentPath);
+    });
+  }
+
+  if (modalCloseBtn) {
+    modalCloseBtn.addEventListener('click', () => {
+      if (fsModal) fsModal.classList.remove('active');
+    });
+  }
+
+  if (modalSelectBtn) {
+    modalSelectBtn.addEventListener('click', () => {
+      if (fsModal) fsModal.classList.remove('active');
+      if (serverPathInput) serverPathInput.value = modalCurrentPath;
+      loadDirectory(modalCurrentPath);
+    });
+  }
+
+  if (modalParentBtn) {
+    modalParentBtn.addEventListener('click', () => {
+      fetchBrowseData(modalCurrentPath).then(data => {
+        if (data.parent) {
+          openFSModal(data.parent);
+        }
+      });
+    });
+  }
 
   // Player Events
-  btnClosePlayer.addEventListener('click', closePlayerModal);
-  playerModal.addEventListener('click', (e) => {
-    if (e.target === playerModal) closePlayerModal();
-  });
+  if (btnClosePlayer) {
+    btnClosePlayer.addEventListener('click', closePlayerModal);
+  }
+  if (playerModal) {
+    playerModal.addEventListener('click', (e) => {
+      if (e.target === playerModal) closePlayerModal();
+    });
+  }
 
   // WebXR Launch
-  btnEnterWebXR.addEventListener('click', () => {
-    const selectedMode = playerModeSelect ? playerModeSelect.value : (currentPlayingVideo ? currentPlayingVideo.mode_3d : '2d');
-    if (!window.isSecureContext) {
-      if (confirm("WebXR requires HTTPS context! Switch to https://" + window.location.hostname + ":8443 now?")) {
-        window.location.href = `https://${window.location.hostname}:8443`;
+  if (btnEnterWebXR) {
+    btnEnterWebXR.addEventListener('click', () => {
+      const selectedMode = playerModeSelect ? playerModeSelect.value : (currentPlayingVideo ? currentPlayingVideo.mode_3d : '2d');
+      if (!window.isSecureContext) {
+        if (confirm("WebXR requires HTTPS context! Switch to https://" + window.location.hostname + ":8443 now?")) {
+          window.location.href = `https://${window.location.hostname}:8443`;
+        }
+        return;
       }
-      return;
-    }
-    if (window.xrPlayer) {
-      window.xrPlayer.startVRSession(webVideoElement, selectedMode);
-    }
-  });
+      if (window.xrPlayer) {
+        window.xrPlayer.startVRSession(webVideoElement, selectedMode);
+      }
+    });
+  }
 
   // Fullscreen 3D Playback for 3D/AR Glasses
-  btnEnterFullscreen3D.addEventListener('click', () => {
-    if (videoWrapper.requestFullscreen) {
-      videoWrapper.requestFullscreen();
-    } else if (videoWrapper.webkitRequestFullscreen) {
-      videoWrapper.webkitRequestFullscreen();
-    }
-    showOverlayBar();
-  });
+  if (btnEnterFullscreen3D) {
+    btnEnterFullscreen3D.addEventListener('click', () => {
+      if (videoWrapper) {
+        if (videoWrapper.requestFullscreen) {
+          videoWrapper.requestFullscreen();
+        } else if (videoWrapper.webkitRequestFullscreen) {
+          videoWrapper.webkitRequestFullscreen();
+        }
+      }
+      showOverlayBar();
+    });
+  }
 
   // ------------------------------------------------------------------
   // Interactive Popup Control Bar Logic (Cursor Click in Fullscreen/Player)
   // ------------------------------------------------------------------
-  videoWrapper.addEventListener('click', (e) => {
-    // If click was inside overlay control bar controls, don't toggle
-    if (e.target.closest('.overlay-control-bar')) return;
-    
-    if (fullscreenOverlayBar.classList.contains('fade-out')) {
-      showOverlayBar();
-    } else {
-      hideOverlayBar();
-    }
-  });
+  if (videoWrapper) {
+    videoWrapper.addEventListener('click', (e) => {
+      // If click was inside overlay control bar controls, don't toggle
+      if (e.target.closest('.overlay-control-bar')) return;
+      
+      if (fullscreenOverlayBar && fullscreenOverlayBar.classList.contains('fade-out')) {
+        showOverlayBar();
+      } else {
+        hideOverlayBar();
+      }
+    });
 
-  videoWrapper.addEventListener('mousemove', () => {
-    showOverlayBar();
-  });
+    videoWrapper.addEventListener('mousemove', () => {
+      showOverlayBar();
+    });
+  }
 
   function showOverlayBar() {
     fullscreenOverlayBar.classList.remove('fade-out');
@@ -284,24 +323,31 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // Play / Pause Toggle
-  overlayBtnPlay.addEventListener('click', (e) => {
-    e.stopPropagation();
-    if (webVideoElement.paused) {
-      webVideoElement.play();
-    } else {
-      webVideoElement.pause();
-    }
-  });
+  if (overlayBtnPlay) {
+    overlayBtnPlay.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (webVideoElement) {
+        if (webVideoElement.paused) {
+          webVideoElement.play();
+        } else {
+          webVideoElement.pause();
+        }
+      }
+    });
+  }
 
   if (overlayBtnMute) {
     overlayBtnMute.addEventListener('click', (e) => {
       e.stopPropagation();
-      webVideoElement.muted = !webVideoElement.muted;
-      updateMuteUI();
+      if (webVideoElement) {
+        webVideoElement.muted = !webVideoElement.muted;
+        updateMuteUI();
+      }
     });
   }
 
   function updateMuteUI() {
+    if (!webVideoElement) return;
     if (webVideoElement.muted) {
       if (overlayMuteIcon) overlayMuteIcon.textContent = '🔇';
       if (overlayMuteText) overlayMuteText.textContent = 'Unmute';
@@ -311,16 +357,31 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  webVideoElement.addEventListener('play', () => {
-    if (overlayPlayIcon) overlayPlayIcon.textContent = '⏸';
-    if (overlayPlayText) overlayPlayText.textContent = 'Pause';
-  });
+  if (webVideoElement) {
+    webVideoElement.addEventListener('play', () => {
+      if (overlayPlayIcon) overlayPlayIcon.textContent = '⏸';
+      if (overlayPlayText) overlayPlayText.textContent = 'Pause';
+    });
 
-  webVideoElement.addEventListener('pause', () => {
-    if (overlayPlayIcon) overlayPlayIcon.textContent = '▶';
-    if (overlayPlayText) overlayPlayText.textContent = 'Play';
-    showOverlayBar();
-  });
+    webVideoElement.addEventListener('pause', () => {
+      if (overlayPlayIcon) overlayPlayIcon.textContent = '▶';
+      if (overlayPlayText) overlayPlayText.textContent = 'Play';
+      showOverlayBar();
+    });
+
+    webVideoElement.addEventListener('timeupdate', () => {
+      if (!isSeeking) {
+        const current = getCurrentTime();
+        const total = getTotalDuration();
+        if (total > 0 && overlaySeekBar) {
+          const pct = (current / total) * 100;
+          overlaySeekBar.value = Math.min(100, Math.max(0, pct));
+          if (overlayTimeCurrent) overlayTimeCurrent.textContent = formatTime(current);
+          if (overlayTimeTotal) overlayTimeTotal.textContent = formatTime(total);
+        }
+      }
+    });
+  }
 
   // Skip -30s and +30s Buttons
   if (overlayBtnSkipBack) {
@@ -338,40 +399,29 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // Video Progress & Seek
-  webVideoElement.addEventListener('timeupdate', () => {
-    if (!isSeeking) {
-      const current = getCurrentTime();
+  if (overlaySeekBar) {
+    overlaySeekBar.addEventListener('mousedown', () => { isSeeking = true; });
+    overlaySeekBar.addEventListener('touchstart', () => { isSeeking = true; });
+    
+    overlaySeekBar.addEventListener('input', (e) => {
+      e.stopPropagation();
       const total = getTotalDuration();
       if (total > 0) {
-        const pct = (current / total) * 100;
-        overlaySeekBar.value = Math.min(100, Math.max(0, pct));
-        overlayTimeCurrent.textContent = formatTime(current);
-        overlayTimeTotal.textContent = formatTime(total);
+        const targetTime = (e.target.value / 100) * total;
+        if (overlayTimeCurrent) overlayTimeCurrent.textContent = formatTime(targetTime);
       }
-    }
-  });
+    });
 
-  overlaySeekBar.addEventListener('mousedown', () => { isSeeking = true; });
-  overlaySeekBar.addEventListener('touchstart', () => { isSeeking = true; });
-  
-  overlaySeekBar.addEventListener('input', (e) => {
-    e.stopPropagation();
-    const total = getTotalDuration();
-    if (total > 0) {
-      const targetTime = (e.target.value / 100) * total;
-      overlayTimeCurrent.textContent = formatTime(targetTime);
-    }
-  });
-
-  overlaySeekBar.addEventListener('change', (e) => {
-    e.stopPropagation();
-    const total = getTotalDuration();
-    if (total > 0) {
-      const targetTime = (e.target.value / 100) * total;
-      seekToTime(targetTime);
-    }
-    isSeeking = false;
-  });
+    overlaySeekBar.addEventListener('change', (e) => {
+      e.stopPropagation();
+      const total = getTotalDuration();
+      if (total > 0) {
+        const targetTime = (e.target.value / 100) * total;
+        seekToTime(targetTime);
+      }
+      isSeeking = false;
+    });
+  }
 
   // 3D Projection Selection Menu (Attached to top header Mode Badge)
   const overlayFormatDropdown = document.getElementById('overlay-format-dropdown');
@@ -450,10 +500,12 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // Exit Video completely
-  overlayBtnExitVideo.addEventListener('click', (e) => {
-    e.stopPropagation();
-    closePlayerModal();
-  });
+  if (overlayBtnExitVideo) {
+    overlayBtnExitVideo.addEventListener('click', (e) => {
+      e.stopPropagation();
+      closePlayerModal();
+    });
+  }
 
   function checkSecureContext() {
     const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
@@ -562,7 +614,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const data = await fetchBrowseData(path);
       currentPath = data.current;
       parentDirectory = (data.parent && data.parent !== currentPath) ? data.parent : null;
-      serverPathInput.value = currentPath;
+      if (serverPathInput) serverPathInput.value = currentPath;
       if (currentPathLabel) {
         currentPathLabel.textContent = currentPath;
         currentPathLabel.title = currentPath;

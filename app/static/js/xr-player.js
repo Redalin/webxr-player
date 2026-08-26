@@ -164,13 +164,19 @@ class XRVideoPlayer {
       laser.name = "laserBeam";
       controller.add(laser);
 
-      // Reticle Dot (Target dot at laser intersection point)
+      // Reticle Dot (Target dot at laser intersection point - rendered on top of HUD)
       const dotGeo = new THREE.RingGeometry(0.012, 0.026, 32);
-      const dotMat = new THREE.MeshBasicMaterial({ color: 0xec4899, side: THREE.DoubleSide, depthTest: false });
+      const dotMat = new THREE.MeshBasicMaterial({
+        color: 0xff0055,
+        side: THREE.DoubleSide,
+        depthTest: false,
+        depthWrite: false,
+        transparent: true
+      });
       const reticleDot = new THREE.Mesh(dotGeo, dotMat);
       reticleDot.name = "reticleDot";
       reticleDot.visible = false;
-      reticleDot.renderOrder = 999;
+      reticleDot.renderOrder = 99999;
       this.scene.add(reticleDot);
 
       this.scene.add(controller);
@@ -445,6 +451,7 @@ class XRVideoPlayer {
     this.hudMesh = new THREE.Mesh(geometry, material);
     this.hudMesh.position.set(0, 0.85, -1.8);
     this.hudMesh.rotation.x = -0.15;
+    this.hudMesh.renderOrder = 10;
 
     this.hudMesh.layers.enable(0);
     this.hudMesh.layers.enable(1);
@@ -454,18 +461,21 @@ class XRVideoPlayer {
     this.updateVRHUDCanvas();
   }
 
-  showVRHUD() {
-    this.hudVisible = true;
-    if (this.hudMesh) this.hudMesh.visible = true;
-    this.setLasersVisible(true);
-    this.updateVRHUDCanvas();
-
+  resetHUDTimer() {
     clearTimeout(this.hudTimer);
     this.hudTimer = setTimeout(() => {
       if (this.videoElement && !this.videoElement.paused && !this.isDragging) {
         this.hideVRHUD();
       }
     }, 6000);
+  }
+
+  showVRHUD() {
+    this.hudVisible = true;
+    if (this.hudMesh) this.hudMesh.visible = true;
+    this.setLasersVisible(true);
+    this.updateVRHUDCanvas();
+    this.resetHUDTimer();
   }
 
   hideVRHUD() {
@@ -660,6 +670,7 @@ class XRVideoPlayer {
 
     this.setLasersVisible(true);
     let newHoveredBtn = null;
+    let hoveringController = null;
 
     for (let i = 0; i < this.controllers.length; i++) {
       const controller = this.controllers[i];
@@ -698,6 +709,7 @@ class XRVideoPlayer {
 
         if (btnId) {
           newHoveredBtn = btnId;
+          hoveringController = controller;
         }
       } else {
         reticleDot.visible = false;
@@ -705,11 +717,17 @@ class XRVideoPlayer {
       }
     }
 
-    // Trigger short vibration pulse when laser enters a new button
+    // Trigger short vibration pulse & reset auto-hide timer when laser enters or hovers over a button
     if (newHoveredBtn && newHoveredBtn !== this.currentHoveredButton) {
       this.currentHoveredButton = newHoveredBtn;
-      this.triggerHapticPulse(this.controllers[0], 0.45, 30);
+      if (hoveringController) {
+        this.triggerHapticPulse(hoveringController, 0.45, 30);
+      }
       this.updateVRHUDCanvas();
+      this.resetHUDTimer();
+    } else if (newHoveredBtn) {
+      // Refresh auto-hide timer while laser is hovering over any button
+      this.resetHUDTimer();
     } else if (!newHoveredBtn && this.currentHoveredButton) {
       this.currentHoveredButton = null;
       this.updateVRHUDCanvas();
