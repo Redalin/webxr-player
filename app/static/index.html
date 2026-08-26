@@ -128,12 +128,23 @@
       <div class="player-header">
         <div class="player-title" id="player-title">Video Title</div>
         <div class="player-controls-top">
-          <span class="badge badge-3d" id="player-3d-badge">3D SBS</span>
+          <div class="format-menu-wrapper">
+            <button id="player-3d-badge" class="badge badge-3d btn-badge-dropdown" title="Select 3D Projection Format">
+              <span id="player-3d-badge-text">3D SBS</span> <span class="badge-arrow">▾</span>
+            </button>
+            <div id="overlay-format-dropdown" class="format-dropdown-menu hidden">
+              <button class="format-option" data-value="2d">2D Flat Screen</button>
+              <button class="format-option" data-value="3d_sbs">3D Side-by-Side (SBS)</button>
+              <button class="format-option" data-value="3d_tb">3D Top-Bottom (TB)</button>
+              <button class="format-option" data-value="3d_180_sbs">3D 180° VR</button>
+              <button class="format-option" data-value="3d_360_sbs">3D 360° VR</button>
+            </div>
+          </div>
           <button id="btn-enter-fullscreen-3d" class="btn btn-secondary" title="Fullscreen 3D">
-            📺 FULLSCREEN
+            📺 <span class="btn-text">FULLSCREEN</span>
           </button>
           <button id="btn-enter-webxr" class="btn btn-xr" title="Enter Immersive Mode">
-            🥽 ENTER VR
+            🥽 <span class="btn-text">ENTER VR</span>
           </button>
           <button id="btn-close-player" class="btn-close">&times;</button>
         </div>
@@ -165,21 +176,6 @@
             </div>
 
             <div class="overlay-actions-right">
-              <div class="format-menu-wrapper">
-                <button id="overlay-btn-format-menu" class="btn btn-secondary" title="Select 3D Projection Format">
-                  ☰ <span class="btn-text">3D Format</span>
-                </button>
-                <div id="overlay-format-dropdown" class="format-dropdown-menu hidden">
-                  <button class="format-option" data-value="2d">2D Flat Screen</button>
-                  <button class="format-option" data-value="3d_sbs">3D Side-by-Side (SBS)</button>
-                  <button class="format-option" data-value="3d_tb">3D Top-Bottom (TB)</button>
-                  <button class="format-option" data-value="3d_180_sbs">3D 180° VR</button>
-                  <button class="format-option" data-value="3d_360_sbs">3D 360° VR</button>
-                </div>
-              </div>
-              <button id="overlay-btn-exit-vr" class="btn btn-secondary" title="Exit VR">
-                🥽 <span class="btn-text">Exit VR / Fullscreen</span>
-              </button>
               <button id="overlay-btn-exit-video" class="btn btn-danger" title="Close Video Player">
                 ✖ <span class="btn-text">Exit Video</span>
               </button>

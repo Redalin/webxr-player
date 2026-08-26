@@ -373,12 +373,11 @@ document.addEventListener('DOMContentLoaded', () => {
     isSeeking = false;
   });
 
-  // Hamburger 3D Projection Selection Menu
-  const overlayBtnFormatMenu = document.getElementById('overlay-btn-format-menu');
+  // 3D Projection Selection Menu (Attached to top header Mode Badge)
   const overlayFormatDropdown = document.getElementById('overlay-format-dropdown');
 
-  if (overlayBtnFormatMenu && overlayFormatDropdown) {
-    overlayBtnFormatMenu.addEventListener('click', (e) => {
+  if (player3DBadge && overlayFormatDropdown) {
+    player3DBadge.addEventListener('click', (e) => {
       e.stopPropagation();
       overlayFormatDropdown.classList.toggle('hidden');
       updateFormatDropdownActiveState();
@@ -436,17 +435,19 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // Exit VR / Fullscreen
-  overlayBtnExitVr.addEventListener('click', (e) => {
-    e.stopPropagation();
-    if (document.fullscreenElement) {
-      document.exitFullscreen();
-    }
-    if (window.xrPlayer) {
-      window.xrPlayer.exitVR();
-    }
-    showOverlayBar();
-  });
+  // Exit VR / Fullscreen (Guard if present)
+  if (overlayBtnExitVr) {
+    overlayBtnExitVr.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (document.fullscreenElement) {
+        document.exitFullscreen();
+      }
+      if (window.xrPlayer) {
+        window.xrPlayer.exitVR();
+      }
+      showOverlayBar();
+    });
+  }
 
   // Exit Video completely
   overlayBtnExitVideo.addEventListener('click', (e) => {
@@ -802,8 +803,14 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function updatePlayerBadge(mode3D) {
-    player3DBadge.textContent = get3DBadgeText(mode3D);
-    player3DBadge.className = `badge ${mode3D !== '2d' ? 'badge-3d' : 'badge-2d'}`;
+    if (!player3DBadge) return;
+    const badgeTextEl = document.getElementById('player-3d-badge-text');
+    if (badgeTextEl) {
+      badgeTextEl.textContent = get3DBadgeText(mode3D);
+    } else {
+      player3DBadge.innerHTML = `<span>${get3DBadgeText(mode3D)}</span> <span class="badge-arrow">▾</span>`;
+    }
+    player3DBadge.className = `badge btn-badge-dropdown ${mode3D !== '2d' ? 'badge-3d' : 'badge-2d'}`;
   }
 
   function get3DBadgeText(mode) {
