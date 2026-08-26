@@ -164,8 +164,8 @@ class XRVideoPlayer {
       laser.name = "laserBeam";
       controller.add(laser);
 
-      // Reticle Dot (Target dot at laser intersection point - rendered on top of HUD)
-      const dotGeo = new THREE.RingGeometry(0.012, 0.026, 32);
+      // Reticle Dot (Small solid target dot at laser tip, slightly larger than laser line)
+      const dotGeo = new THREE.CircleGeometry(0.005, 32);
       const dotMat = new THREE.MeshBasicMaterial({
         color: 0xff0055,
         side: THREE.DoubleSide,
@@ -688,8 +688,11 @@ class XRVideoPlayer {
       if (intersects.length > 0) {
         const hit = intersects[0];
 
-        // 1. Position Reticle Dot right at the 3D surface intersection point
-        reticleDot.position.copy(hit.point);
+        // 1. Position Reticle Dot slightly in front of the 3D surface intersection point toward the camera
+        const dirToCam = this.camera
+          ? new THREE.Vector3().subVectors(this.camera.position, hit.point).normalize()
+          : new THREE.Vector3(0, 0, 1);
+        reticleDot.position.copy(hit.point).addScaledVector(dirToCam, 0.015);
         if (this.camera) {
           reticleDot.lookAt(this.camera.position);
         }
@@ -1044,6 +1047,11 @@ class XRVideoPlayer {
 
     // Update laser line trimming, reticle dot position, and haptics hover
     this.updateRaycastingAndHover();
+
+    // Continuously update VR HUD Canvas while HUD is visible & video playing so progress bar & timer advance smoothly
+    if (this.hudVisible && this.videoElement && !this.videoElement.paused) {
+      this.updateVRHUDCanvas();
+    }
 
     // Handle smooth dragging of HUD panel with active VR controller
     if (this.isDragging && this.activeDragController && this.hudMesh) {
