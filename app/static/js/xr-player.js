@@ -8,8 +8,12 @@ class XRVideoPlayer {
     this.videoTexture = null;
     this.leftMesh = null;
     this.rightMesh = null;
-    this.mode3D = '3d_sbs'; // '2d', '3d_sbs', '3d_tb', '3d_180_sbs', '3d_360_sbs'
+    this.mode3D = '3d_sbs'; // '2d', '2d_passthrough', '3d_sbs', '3d_tb', '3d_180_sbs', '3d_360_sbs'
     this.isVRSupported = false;
+
+    // Animated 2D Cinema Floor Effect State
+    this.floorMesh = null;
+    this.floorTexture = null;
 
     // In-VR 3D HUD Panel State
     this.hudMesh = null;
@@ -25,7 +29,10 @@ class XRVideoPlayer {
 
     // Dragging state
     this.isDragging = false;
+    this.wasDragging = false;
     this.activeDragController = null;
+    this.dragOffset = new THREE.Vector3();
+    this.dragDistance = 1.5;
 
     // VR Joystick 5-second jog state
     this.lastJoystickJogTime = 0;
@@ -33,6 +40,7 @@ class XRVideoPlayer {
 
     // VR 3D Format Dropdown Menu state
     this.formatMenuOpen = false;
+    this.isSwitchingMode = false;
 
     this.checkXRSupport();
   }
@@ -40,9 +48,11 @@ class XRVideoPlayer {
   async checkXRSupport() {
     if ('xr' in navigator) {
       try {
-        this.isVRSupported = await navigator.xr.isSessionSupported('immersive-vr');
+        const isVR = await navigator.xr.isSessionSupported('immersive-vr');
+        const isAR = await navigator.xr.isSessionSupported('immersive-ar');
+        this.isVRSupported = isVR || isAR;
       } catch (err) {
-        console.warn("WebXR immersive-vr check failed:", err);
+        console.warn("WebXR support check failed:", err);
         this.isVRSupported = false;
       }
     }
@@ -58,12 +68,32 @@ class XRVideoPlayer {
     this.mode3D = projectionMode;
 
     try {
-      this.xrSession = await navigator.xr.requestSession('immersive-vr', {
-        optionalFeatures: ['local-floor', 'bounded-floor', 'hand-tracking']
-      });
+      const isPassthrough = (projectionMode === '2d_passthrough');
+      let sessionMode = 'immersive-vr';
+
+      if (isPassthrough) {
+        try {
+          const isARSupported = await navigator.xr.isSessionSupported('immersive-ar');
+          if (isARSupported) {
+            sessionMode = 'immersive-ar';
+          }
+        } catch (e) {}
+      }
+
+      const sessionInit = sessionMode === 'immersive-ar'
+        ? { optionalFeatures: ['local-floor', 'bounded-floor', 'hand-tracking'] }
+        : { optionalFeatures: ['local-floor', 'bounded-floor', 'hand-tracking', 'passthrough'] };
+
+      this.xrSession = await navigator.xr.requestSession(sessionMode, sessionInit);
 
       this.initThreeJS();
       await this.renderer.xr.setSession(this.xrSession);
+
+      if (isPassthrough && 'requestPassthrough' in this.xrSession) {
+        try {
+          await this.xrSession.requestPassthrough();
+        } catch (e) {}
+      }
 
       this.xrSession.addEventListener('end', () => {
         this.onVRSessionEnd();
@@ -87,7 +117,11 @@ class XRVideoPlayer {
 
   initThreeJS() {
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0x05050a);
+    if (this.isPassthroughMode(this.mode3D)) {
+      this.scene.background = null;
+    } else {
+      this.scene.background = new THREE.Color(0x05050a);
+    }
 
     this.camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 1000);
     this.scene.add(this.camera);
@@ -95,6 +129,11 @@ class XRVideoPlayer {
     this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     this.renderer.setPixelRatio(window.devicePixelRatio);
     this.renderer.setSize(window.innerWidth, window.innerHeight);
+    if (this.isPassthroughMode(this.mode3D)) {
+      this.renderer.setClearColor(0x000000, 0);
+    } else {
+      this.renderer.setClearColor(0x05050a, 1);
+    }
     this.renderer.xr.enabled = true;
 
     const container = document.getElementById('xr-canvas-container');
@@ -156,16 +195,130 @@ class XRVideoPlayer {
     }
   }
 
-  setProjectionMode(newMode) {
+  isPassthroughMode(mode) {
+    return mode === '2d_passthrough';
+  }
+
+  async setProjectionMode(newMode) {
+    const oldMode = this.mode3D;
+    const oldIsPassthrough = this.isPassthroughMode(oldMode);
+    const newIsPassthrough = this.isPassthroughMode(newMode);
+
     this.mode3D = newMode;
+
+    // If switching between VR mode (immersive-vr) and Passthrough mode (immersive-ar),
+    // restart the WebXR session seamlessly so Meta Quest hardware compositor switches modes.
+    if (this.xrSession && (oldIsPassthrough !== newIsPassthrough)) {
+      const savedTime = this.videoElement ? this.videoElement.currentTime : 0;
+      const wasPlaying = this.videoElement ? !this.videoElement.paused : false;
+
+      this.isSwitchingMode = true;
+      const currentSession = this.xrSession;
+      this.xrSession = null;
+      await currentSession.end();
+
+      await this.startVRSession(this.videoElement, newMode);
+      this.isSwitchingMode = false;
+
+      if (this.videoElement) {
+        this.videoElement.currentTime = savedTime;
+        if (wasPlaying) {
+          this.videoElement.play().catch(() => {});
+        }
+      }
+      return;
+    }
+
+    if (this.scene) {
+      if (newIsPassthrough) {
+        this.scene.background = null;
+        if (this.renderer) {
+          this.renderer.setClearColor(0x000000, 0);
+        }
+      } else {
+        this.scene.background = new THREE.Color(0x05050a);
+        if (this.renderer) {
+          this.renderer.setClearColor(0x05050a, 1);
+        }
+      }
+    }
+
     if (this.xrSession && this.scene) {
       this.setupStereoVideoScene();
       this.updateVRHUDCanvas();
     }
   }
 
+  setupFloorEffect() {
+    if (this.floorMesh && this.scene) {
+      this.scene.remove(this.floorMesh);
+      if (this.floorMesh.geometry) this.floorMesh.geometry.dispose();
+      if (this.floorMesh.material) this.floorMesh.material.dispose();
+      this.floorMesh = null;
+    }
+    if (this.floorTexture) {
+      this.floorTexture.dispose();
+      this.floorTexture = null;
+    }
+
+    if (this.mode3D !== '2d') return;
+
+    // Create a 512x512 procedural floor grid texture with soft radial glow & grid lines
+    const canvas = document.createElement('canvas');
+    canvas.width = 512;
+    canvas.height = 512;
+    const ctx = canvas.getContext('2d');
+
+    // Radial gradient glow below the video screen
+    const grad = ctx.createRadialGradient(256, 256, 10, 256, 256, 256);
+    grad.addColorStop(0, 'rgba(99, 102, 241, 0.35)');
+    grad.addColorStop(0.5, 'rgba(30, 27, 75, 0.18)');
+    grad.addColorStop(1, 'rgba(5, 5, 10, 0)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, 512, 512);
+
+    // Subtle grid lines for spatial floor depth perception
+    ctx.strokeStyle = 'rgba(129, 140, 248, 0.22)';
+    ctx.lineWidth = 2;
+    const step = 32;
+    for (let x = 0; x <= 512; x += step) {
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, 512);
+      ctx.stroke();
+    }
+    for (let y = 0; y <= 512; y += step) {
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(512, y);
+      ctx.stroke();
+    }
+
+    this.floorTexture = new THREE.CanvasTexture(canvas);
+    this.floorTexture.wrapS = THREE.RepeatWrapping;
+    this.floorTexture.wrapT = THREE.RepeatWrapping;
+    this.floorTexture.repeat.set(4, 4);
+
+    const floorGeo = new THREE.PlaneGeometry(16, 16);
+    const floorMat = new THREE.MeshBasicMaterial({
+      map: this.floorTexture,
+      transparent: true,
+      opacity: 0.6,
+      side: THREE.DoubleSide,
+      depthWrite: false
+    });
+
+    this.floorMesh = new THREE.Mesh(floorGeo, floorMat);
+    this.floorMesh.rotation.x = -Math.PI / 2;
+    this.floorMesh.position.set(0, 0.01, -1.5);
+    if (this.scene) this.scene.add(this.floorMesh);
+  }
+
   setupStereoVideoScene() {
     if (!this.videoElement) return;
+
+    // Create / update or clear animated floor effect based on 2D mode
+    this.setupFloorEffect();
 
     if (!this.videoTexture) {
       this.videoTexture = new THREE.VideoTexture(this.videoElement);
@@ -178,10 +331,32 @@ class XRVideoPlayer {
     if (this.rightMesh) this.scene.remove(this.rightMesh);
 
     const mode = this.mode3D;
+    const is2D = (mode === '2d' || mode === '2d_passthrough');
 
-    if (mode === '2d') {
+    if (is2D) {
       const geometry = new THREE.PlaneGeometry(4, 2.25);
-      const material = new THREE.MeshBasicMaterial({ map: this.videoTexture, side: THREE.DoubleSide });
+      const texture = this.videoTexture.clone();
+      texture.needsUpdate = true;
+
+      // Check if original video source is SBS or TB format
+      const videoTitle = (this.videoElement && this.videoElement.title) ? this.videoElement.title.toLowerCase() : '';
+      const isSourceSBS = videoTitle.includes('sbs') || videoTitle.includes('3d');
+      const isSourceTB = videoTitle.includes('tb') || videoTitle.includes('ou');
+
+      if (isSourceSBS) {
+        // Crop left eye half for clean single 2D flat viewing of 3D SBS video
+        texture.offset.set(0, 0);
+        texture.repeat.set(0.5, 1.0);
+      } else if (isSourceTB) {
+        // Crop top eye half for clean single 2D flat viewing of 3D TB video
+        texture.offset.set(0, 0.5);
+        texture.repeat.set(1.0, 0.5);
+      } else {
+        texture.offset.set(0, 0);
+        texture.repeat.set(1.0, 1.0);
+      }
+
+      const material = new THREE.MeshBasicMaterial({ map: texture, side: THREE.DoubleSide });
       this.leftMesh = new THREE.Mesh(geometry, material);
       this.leftMesh.position.set(0, 1.6, -3);
       this.scene.add(this.leftMesh);
@@ -438,15 +613,16 @@ class XRVideoPlayer {
     if (this.formatMenuOpen) {
       // Floating glassmorphism menu card anchored to top-right mode badge
       ctx.fillStyle = 'rgba(14, 15, 26, 0.98)';
-      this.drawRoundedRect(ctx, 600, 72, 300, 288, 16, true, true, '#6366f1');
+      this.drawRoundedRect(ctx, 600, 72, 300, 296, 16, true, true, '#6366f1');
 
       ctx.fillStyle = '#9ca3af';
       ctx.font = 'bold 13px sans-serif';
       ctx.textAlign = 'center';
-      ctx.fillText('SELECT 3D FORMAT', 750, 94);
+      ctx.fillText('SELECT 3D FORMAT', 750, 92);
 
       const options = [
         { id: 'fmt_2d', mode: '2d', label: '2D Flat Screen' },
+        { id: 'fmt_2d_passthrough', mode: '2d_passthrough', label: '2D Flat Passthrough' },
         { id: 'fmt_3d_sbs', mode: '3d_sbs', label: '3D Side-by-Side (SBS)' },
         { id: 'fmt_3d_tb', mode: '3d_tb', label: '3D Top-Bottom (TB)' },
         { id: 'fmt_3d_180_sbs', mode: '3d_180_sbs', label: '3D 180° VR Hemisphere' },
@@ -454,17 +630,17 @@ class XRVideoPlayer {
       ];
 
       options.forEach((opt, idx) => {
-        const itemY = 106 + idx * 46;
+        const itemY = 100 + idx * 42;
         const isSelected = (this.mode3D === opt.mode);
         const isHovered = (this.currentHoveredButton === opt.id);
 
         ctx.fillStyle = isHovered ? '#7c3aed' : (isSelected ? '#6366f1' : '#26283b');
-        this.drawRoundedRect(ctx, 610, itemY, 280, 40, 8, true, true, isHovered ? '#ec4899' : (isSelected ? '#818cf8' : '#3f4260'));
+        this.drawRoundedRect(ctx, 610, itemY, 280, 36, 8, true, true, isHovered ? '#ec4899' : (isSelected ? '#818cf8' : '#3f4260'));
 
         ctx.fillStyle = '#ffffff';
-        ctx.font = isSelected ? 'bold 14px sans-serif' : '13px sans-serif';
+        ctx.font = isSelected ? 'bold 13px sans-serif' : '12px sans-serif';
         ctx.textAlign = 'left';
-        ctx.fillText(isSelected ? `✓  ${opt.label}` : opt.label, 625, itemY + 25);
+        ctx.fillText(isSelected ? `✓  ${opt.label}` : opt.label, 625, itemY + 23);
       });
     }
 
@@ -548,11 +724,12 @@ class XRVideoPlayer {
     // Format Dropdown Options (when formatMenuOpen is true)
     if (this.formatMenuOpen) {
       if (x >= 600 && x <= 900) {
-        if (y >= 104 && y <= 138) return 'fmt_2d';
-        if (y >= 142 && y <= 176) return 'fmt_3d_sbs';
-        if (y >= 180 && y <= 214) return 'fmt_3d_tb';
-        if (y >= 218 && y <= 252) return 'fmt_3d_180_sbs';
-        if (y >= 256 && y <= 290) return 'fmt_3d_360_sbs';
+        if (y >= 100 && y <= 138) return 'fmt_2d';
+        if (y >= 142 && y <= 180) return 'fmt_2d_passthrough';
+        if (y >= 184 && y <= 222) return 'fmt_3d_sbs';
+        if (y >= 226 && y <= 264) return 'fmt_3d_tb';
+        if (y >= 268 && y <= 306) return 'fmt_3d_180_sbs';
+        if (y >= 310 && y <= 348) return 'fmt_3d_360_sbs';
       }
     }
 
@@ -592,7 +769,14 @@ class XRVideoPlayer {
       // Check if click was on Drag Bar [x: 60..580, y: 28..70]
       if (x >= 60 && x <= 580 && y >= 28 && y <= 70) {
         this.isDragging = true;
+        this.wasDragging = true;
         this.activeDragController = controller;
+
+        // Store exact 3D drag intersection point & offset from HUD position so panel doesn't jump
+        const hitPoint = intersects[0].point;
+        this.dragDistance = intersects[0].distance;
+        this.dragOffset = new THREE.Vector3().subVectors(this.hudMesh.position, hitPoint);
+
         this.triggerHapticPulse(controller, 0.6, 40);
       }
     }
@@ -607,6 +791,11 @@ class XRVideoPlayer {
   }
 
   onVRControllerSelect(controller) {
+    if (this.wasDragging) {
+      this.wasDragging = false;
+      return;
+    }
+
     if (!this.hudMesh || !this.scene) return;
 
     if (!this.hudVisible) {
@@ -825,6 +1014,13 @@ class XRVideoPlayer {
       this.videoTexture.needsUpdate = true;
     }
 
+    // Maintain stationary floor grid plane in 2D Flat Screen mode (without passthrough)
+    if (this.mode3D === '2d' && this.floorMesh) {
+      if (this.floorMesh.material) {
+        this.floorMesh.material.opacity = 0.55;
+      }
+    }
+
     // Process VR controller joystick / thumbstick X-axis jog (±5 seconds per move)
     this.updateJoystickJog(frame);
 
@@ -841,7 +1037,9 @@ class XRVideoPlayer {
       tempMatrix.identity().extractRotation(this.activeDragController.matrixWorld);
       controllerDir.set(0, 0, -1).applyMatrix4(tempMatrix);
 
-      const targetHudPos = controllerPos.clone().add(controllerDir.clone().multiplyScalar(1.5));
+      const dist = this.dragDistance || 1.5;
+      const rayPoint = controllerPos.clone().add(controllerDir.clone().multiplyScalar(dist));
+      const targetHudPos = rayPoint.add(this.dragOffset || new THREE.Vector3());
       this.hudMesh.position.copy(targetHudPos);
 
       // Rotate HUD panel to face user camera
@@ -856,6 +1054,8 @@ class XRVideoPlayer {
   }
 
   onVRSessionEnd() {
+    if (this.isSwitchingMode) return;
+
     if (this.renderer) {
       this.renderer.setAnimationLoop(null);
     }
@@ -868,6 +1068,11 @@ class XRVideoPlayer {
     if (this.videoElement) {
       this.videoElement.pause();
     }
+    if (this.floorMesh && this.scene) {
+      this.scene.remove(this.floorMesh);
+    }
+    this.floorMesh = null;
+    this.floorTexture = null;
     this.xrSession = null;
     this.hudMesh = null;
     this.isDragging = false;
@@ -907,6 +1112,7 @@ class XRVideoPlayer {
 
   getModeTitle(mode) {
     switch (mode) {
+      case '2d_passthrough': return '2D Passthrough';
       case '3d_sbs': return '3D SBS';
       case '3d_tb': return '3D Top-Bottom';
       case '3d_180_sbs': return '180° VR';

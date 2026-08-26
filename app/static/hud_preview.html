@@ -183,6 +183,7 @@
         <label>3D Projection Format</label>
         <select id="select-mode">
           <option value="2d">2D Flat Screen</option>
+          <option value="2d_passthrough">2D Flat Screen Passthrough</option>
           <option value="3d_sbs">3D Side-by-Side (SBS)</option>
           <option value="3d_tb">3D Top-Bottom (TB)</option>
           <option value="3d_180_sbs" selected>3D 180° VR Hemisphere</option>
@@ -262,6 +263,7 @@
 
       function getModeTitle(mode) {
         switch (mode) {
+          case '2d_passthrough': return '2D Passthrough';
           case '3d_sbs': return '3D SBS';
           case '3d_tb': return '3D Top-Bottom';
           case '3d_180_sbs': return '180° VR';
@@ -412,15 +414,16 @@
         if (formatMenuOpen) {
           // Floating glassmorphism menu card anchored to top-right mode badge
           ctx.fillStyle = 'rgba(14, 15, 26, 0.98)';
-          drawRoundedRect(600, 72, 300, 288, 16, true, true, '#6366f1');
+          drawRoundedRect(600, 72, 300, 296, 16, true, true, '#6366f1');
 
           ctx.fillStyle = '#9ca3af';
           ctx.font = 'bold 13px sans-serif';
           ctx.textAlign = 'center';
-          ctx.fillText('SELECT 3D FORMAT', 750, 94);
+          ctx.fillText('SELECT 3D FORMAT', 750, 92);
 
           const options = [
             { id: 'fmt_2d', mode: '2d', label: '2D Flat Screen' },
+            { id: 'fmt_2d_passthrough', mode: '2d_passthrough', label: '2D Flat Passthrough' },
             { id: 'fmt_3d_sbs', mode: '3d_sbs', label: '3D Side-by-Side (SBS)' },
             { id: 'fmt_3d_tb', mode: '3d_tb', label: '3D Top-Bottom (TB)' },
             { id: 'fmt_3d_180_sbs', mode: '3d_180_sbs', label: '3D 180° VR Hemisphere' },
@@ -428,17 +431,17 @@
           ];
 
           options.forEach((opt, idx) => {
-            const itemY = 106 + idx * 46;
+            const itemY = 100 + idx * 42;
             const isSelected = (mode3D === opt.mode);
             const isHovered = (currentHoveredButton === opt.id);
 
             ctx.fillStyle = isHovered ? '#7c3aed' : (isSelected ? '#6366f1' : '#26283b');
-            drawRoundedRect(610, itemY, 280, 40, 8, true, true, isHovered ? '#ec4899' : (isSelected ? '#818cf8' : '#3f4260'));
+            drawRoundedRect(610, itemY, 280, 36, 8, true, true, isHovered ? '#ec4899' : (isSelected ? '#818cf8' : '#3f4260'));
 
             ctx.fillStyle = '#ffffff';
-            ctx.font = isSelected ? 'bold 14px sans-serif' : '13px sans-serif';
+            ctx.font = isSelected ? 'bold 13px sans-serif' : '12px sans-serif';
             ctx.textAlign = 'left';
-            ctx.fillText(isSelected ? `✓  ${opt.label}` : opt.label, 625, itemY + 25);
+            ctx.fillText(isSelected ? `✓  ${opt.label}` : opt.label, 625, itemY + 23);
           });
         }
 
@@ -453,11 +456,12 @@
         // Format Dropdown Options (when formatMenuOpen is true)
         if (formatMenuOpen) {
           if (x >= 600 && x <= 900) {
-            if (y >= 106 && y <= 146) return 'fmt_2d';
-            if (y >= 152 && y <= 192) return 'fmt_3d_sbs';
-            if (y >= 198 && y <= 238) return 'fmt_3d_tb';
-            if (y >= 244 && y <= 284) return 'fmt_3d_180_sbs';
-            if (y >= 290 && y <= 330) return 'fmt_3d_360_sbs';
+            if (y >= 100 && y <= 138) return 'fmt_2d';
+            if (y >= 142 && y <= 180) return 'fmt_2d_passthrough';
+            if (y >= 184 && y <= 222) return 'fmt_3d_sbs';
+            if (y >= 226 && y <= 264) return 'fmt_3d_tb';
+            if (y >= 268 && y <= 306) return 'fmt_3d_180_sbs';
+            if (y >= 310 && y <= 348) return 'fmt_3d_360_sbs';
           }
         }
 

@@ -744,6 +744,7 @@ document.addEventListener('DOMContentLoaded', () => {
         <div class="card-footer">
           <select class="mode-selector-select" data-role="mode-select">
             <option value="2d" ${video.mode_3d === '2d' ? 'selected' : ''}>2D Flat</option>
+            <option value="2d_passthrough" ${video.mode_3d === '2d_passthrough' ? 'selected' : ''}>2D Passthrough</option>
             <option value="3d_sbs" ${video.mode_3d === '3d_sbs' ? 'selected' : ''}>3D SBS</option>
             <option value="3d_tb" ${video.mode_3d === '3d_tb' ? 'selected' : ''}>3D Top-Bottom</option>
             <option value="3d_180_sbs" ${video.mode_3d === '3d_180_sbs' ? 'selected' : ''}>3D 180° VR</option>
@@ -815,6 +816,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function get3DBadgeText(mode) {
     switch(mode) {
+      case '2d_passthrough': return '2D Passthrough';
       case '3d_sbs': return '3D SBS';
       case '3d_tb': return '3D TB';
       case '3d_180_sbs': return '3D 180°';
@@ -825,6 +827,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function detect3DModeFromFilename(fn) {
     const f = fn.toLowerCase();
+    if (f.includes('passthrough')) return '2d_passthrough';
     if (f.includes('180')) return '3d_180_sbs';
     if (f.includes('360')) return '3d_360_sbs';
     if (f.includes('sbs') || f.includes('3d')) return '3d_sbs';
