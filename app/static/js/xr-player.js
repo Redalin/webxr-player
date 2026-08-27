@@ -42,6 +42,14 @@ class XRVideoPlayer {
     this.formatMenuOpen = false;
     this.isSwitchingMode = false;
 
+    // VR Seek Bar Scrubbing & Debounce state
+    this.isScrubbingSeekBar = false;
+    this.activeScrubController = null;
+    this.seekCursorX = null;
+    this.lastDebouncedSeekTime = 0;
+    this.scrubDebounceTimer = null;
+    this.pendingSeekTime = null;
+
     this.checkXRSupport();
   }
 
@@ -495,28 +503,57 @@ class XRVideoPlayer {
     });
   }
 
+  debouncedSeekToTime(targetTime) {
+    this.pendingSeekTime = targetTime;
+    const now = performance.now();
+    if (now - this.lastDebouncedSeekTime > 120) {
+      this.lastDebouncedSeekTime = now;
+      if (window.seekToTime) {
+        window.seekToTime(targetTime);
+      } else if (this.videoElement) {
+        this.videoElement.currentTime = targetTime;
+      }
+    }
+    clearTimeout(this.scrubDebounceTimer);
+    this.scrubDebounceTimer = setTimeout(() => {
+      if (this.pendingSeekTime !== null) {
+        if (window.seekToTime) {
+          window.seekToTime(this.pendingSeekTime);
+        } else if (this.videoElement) {
+          this.videoElement.currentTime = this.pendingSeekTime;
+        }
+        this.pendingSeekTime = null;
+      }
+    }, 150);
+  }
+
   updateVRHUDCanvas() {
-    if (!this.hudCtx || !this.hudCanvas) return;
+    if (!this.hudCtx) return;
     const ctx = this.hudCtx;
-    const w = 1024;
-    const h = 380;
 
-    ctx.clearRect(0, 0, w, h);
+    // Clear background
+    ctx.clearRect(0, 0, 1024, 380);
 
-    // Background Glassmorphism Panel (Draws for y: 15..240, height 225px)
-    ctx.fillStyle = 'rgba(18, 19, 30, 0.94)';
-    this.drawRoundedRect(ctx, 20, 15, w - 40, 225, 20, true, true, '#2e3046');
+    // Semi-transparent dark glassmorphism HUD panel container [1024 x 380]
+    ctx.fillStyle = 'rgba(14, 15, 26, 0.92)';
+    this.drawRoundedRect(ctx, 40, 10, 944, 360, 24, true, true, '#4f46e5');
 
-    // 1. DRAG BAR (Top Left Handle) [x: 60..580, y: 28..70]
+    // Inner subtle glow border
+    ctx.strokeStyle = 'rgba(99, 102, 241, 0.35)';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(44, 14, 936, 352);
+
+    // 1. Header Bar: Drag Handle [x: 60..580], Title, Close [x: 914..964]
     const isDragHover = (this.currentHoveredButton === 'drag_bar');
-    ctx.fillStyle = this.isDragging ? '#4f46e5' : (isDragHover ? '#3730a3' : '#26283b');
-    this.drawRoundedRect(ctx, 60, 28, 520, 42, 10, true, true, isDragHover ? '#818cf8' : '#3f4260');
-    ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 20px -apple-system, sans-serif';
-    const videoTitle = (this.videoElement && this.videoElement.title) ? this.videoElement.title : 'DRAG PANEL TO MOVE';
-    ctx.fillText(`≡ ${this.truncateString(videoTitle, 26)}`, 80, 56);
+    ctx.fillStyle = isDragHover ? 'rgba(99, 102, 241, 0.3)' : 'rgba(255, 255, 255, 0.08)';
+    this.drawRoundedRect(ctx, 60, 28, 520, 42, 10, true, true, isDragHover ? '#a78bfa' : '#3f4260');
 
-    // 2. CLOSE BUTTON [✖] (Top Right) [x: 914..964, y: 28..70]
+    ctx.fillStyle = isDragHover ? '#a78bfa' : '#9ca3af';
+    ctx.font = 'bold 15px sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText('⋮⋮  DRAG TO RE-POSITION HUD', 80, 54);
+
+    // Close Button [x: 914..964, y: 28..70]
     const isCloseHover = (this.currentHoveredButton === 'close_btn');
     ctx.fillStyle = isCloseHover ? '#ef4444' : '#dc2626';
     this.drawRoundedRect(ctx, 914, 28, 50, 42, 10, true, true, isCloseHover ? '#fca5a5' : '#ef4444');
@@ -540,7 +577,10 @@ class XRVideoPlayer {
     const duration = window.getTotalDuration ? window.getTotalDuration() : ((this.videoElement && this.videoElement.duration) ? this.videoElement.duration : 1);
     const progressPct = duration > 0 ? Math.min(1, Math.max(0, currentTime / duration)) : 0;
 
-    // Elapsed Time (Left of Seek Bar)
+    const isSeekHover = (this.currentHoveredButton === 'seek_bar');
+    const isScrubbing = this.isScrubbingSeekBar;
+
+    // Elapsed Time (Left of Seek Bar - shows actual video current time)
     ctx.fillStyle = '#9ca3af';
     ctx.font = '16px monospace';
     ctx.textAlign = 'left';
@@ -550,16 +590,44 @@ class XRVideoPlayer {
     ctx.textAlign = 'right';
     ctx.fillText(this.formatTime(duration), 964, 105);
 
-    // Horizontally Shrunken Seek Bar Track [x: 155..865] (Width 710px)
-    const isSeekHover = (this.currentHoveredButton === 'seek_bar');
-    ctx.fillStyle = isSeekHover ? '#3f4260' : '#2e3046';
-    this.drawRoundedRect(ctx, 155, 92, 710, 16, 8, true, isSeekHover, '#818cf8');
+    // 10px Height Seek Bar Track [x: 155..865, y: 95..105] (Width 710px)
+    ctx.fillStyle = (isSeekHover || isScrubbing) ? '#3f4260' : '#2e3046';
+    this.drawRoundedRect(ctx, 155, 95, 710, 10, 5, true, isSeekHover || isScrubbing, '#818cf8');
 
-    // Filled Progress Bar
+    // Filled Progress Bar (Height 10px) - reflects actual video progress, updates when click is released / seek completes
     if (progressPct > 0) {
-      ctx.fillStyle = isSeekHover ? '#818cf8' : '#6366f1';
-      this.drawRoundedRect(ctx, 155, 92, Math.max(16, 710 * progressPct), 16, 8, true, false);
+      ctx.fillStyle = (isSeekHover || isScrubbing) ? '#818cf8' : '#6366f1';
+      this.drawRoundedRect(ctx, 155, 95, Math.max(10, 710 * progressPct), 10, 5, true, false);
     }
+
+    // 20px Diameter Scrubbing Dot (Radius 10px) centered at y = 100
+    // Follows the cursor position along the timeline ONLY while actively clicking & dragging (isScrubbing)
+    let knobX = 155 + 710 * progressPct;
+    if (isScrubbing && this.seekCursorX !== null && this.seekCursorX !== undefined) {
+      knobX = Math.min(865, Math.max(155, this.seekCursorX));
+
+      // Target time preview tooltip above scrubber knob while actively dragging
+      if (duration > 0) {
+        const scrubPct = (knobX - 155) / 710;
+        const scrubTime = scrubPct * duration;
+        const timeStr = this.formatTime(scrubTime);
+
+        ctx.fillStyle = 'rgba(99, 102, 241, 0.95)';
+        this.drawRoundedRect(ctx, knobX - 30, 68, 60, 22, 6, true, false);
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 12px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText(timeStr, knobX, 83);
+      }
+    }
+
+    ctx.beginPath();
+    ctx.arc(knobX, 100, 10, 0, Math.PI * 2);
+    ctx.fillStyle = (isSeekHover || isScrubbing) ? '#a78bfa' : '#818cf8';
+    ctx.fill();
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = '#ffffff';
+    ctx.stroke();
 
     // 3. Single Unified Controls Row [y: 160..195] (Height 35px - text fitted)
     // Left-Justified Group: Play/Pause, Rewind -30s, Fast-Forward +30s, Mute
@@ -710,14 +778,47 @@ class XRVideoPlayer {
         const y = (1 - uv.y) * 380;
         const btnId = this.getButtonIdAt(x, y);
 
-        if (btnId) {
+        if (btnId === 'seek_bar') {
           newHoveredBtn = btnId;
           hoveringController = controller;
+          this.seekCursorX = Math.min(865, Math.max(155, x));
+        } else if (btnId) {
+          newHoveredBtn = btnId;
+          hoveringController = controller;
+          if (!this.isScrubbingSeekBar) this.seekCursorX = null;
+        } else {
+          if (!this.isScrubbingSeekBar) this.seekCursorX = null;
         }
       } else {
         reticleDot.visible = false;
         if (laser) laser.scale.set(1, 1, 1.0);
       }
+    }
+
+    // Active Seek Bar Scrubbing (Click & Drag)
+    if (this.isScrubbingSeekBar && this.activeScrubController) {
+      const tempMatrix = new THREE.Matrix4();
+      tempMatrix.identity().extractRotation(this.activeScrubController.matrixWorld);
+
+      this.raycaster.ray.origin.setFromMatrixPosition(this.activeScrubController.matrixWorld);
+      this.raycaster.ray.direction.set(0, 0, -1).applyMatrix4(tempMatrix);
+
+      const intersects = this.raycaster.intersectObject(this.hudMesh);
+      if (intersects.length > 0) {
+        const uv = intersects[0].uv;
+        const x = uv.x * 1024;
+        const clampedX = Math.min(865, Math.max(155, x));
+        this.seekCursorX = clampedX;
+
+        const duration = window.getTotalDuration ? window.getTotalDuration() : ((this.videoElement && this.videoElement.duration) ? this.videoElement.duration : 0);
+        if (duration > 0) {
+          const pct = (clampedX - 155) / 710;
+          const targetTime = pct * duration;
+          this.debouncedSeekToTime(targetTime);
+        }
+      }
+      this.updateVRHUDCanvas();
+      this.resetHUDTimer();
     }
 
     // Trigger short vibration pulse & reset auto-hide timer when laser enters or hovers over a button
@@ -754,8 +855,8 @@ class XRVideoPlayer {
       }
     }
 
-    // Shrunken Seek Bar Hitbox [x: 155..865, y: 85..115]
-    if (x >= 155 && x <= 865 && y >= 85 && y <= 115) return 'seek_bar';
+    // 10px Height Seek Bar Track Hitbox [x: 155..865, y: 80..120] (35px hit height for easy laser pointing)
+    if (x >= 155 && x <= 865 && y >= 80 && y <= 120) return 'seek_bar';
 
     // Single Unified Controls Row [y: 160..195] (Height 35px)
     if (y >= 160 && y <= 195) {
@@ -770,7 +871,7 @@ class XRVideoPlayer {
     return null;
   }
 
-  // Handle Controller Select Start (Begins dragging if hitting Drag Bar)
+  // Handle Controller Select Start (Begins dragging if hitting Drag Bar or Seek Bar)
   onControllerSelectStart(controller) {
     if (!this.hudMesh || !this.scene || !this.hudVisible) return;
 
@@ -786,9 +887,10 @@ class XRVideoPlayer {
       const uv = intersects[0].uv;
       const x = uv.x * 1024;
       const y = (1 - uv.y) * 380;
+      const btnId = this.getButtonIdAt(x, y);
 
       // Check if click was on Drag Bar [x: 60..580, y: 28..70]
-      if (x >= 60 && x <= 580 && y >= 28 && y <= 70) {
+      if (btnId === 'drag_bar') {
         this.isDragging = true;
         this.wasDragging = true;
         this.activeDragController = controller;
@@ -799,6 +901,21 @@ class XRVideoPlayer {
         this.dragOffset = new THREE.Vector3().subVectors(this.hudMesh.position, hitPoint);
 
         this.triggerHapticPulse(controller, 0.6, 40);
+      } else if (btnId === 'seek_bar') {
+        this.isScrubbingSeekBar = true;
+        this.wasDragging = true;
+        this.activeScrubController = controller;
+        const clampedX = Math.min(865, Math.max(155, x));
+        this.seekCursorX = clampedX;
+
+        const duration = window.getTotalDuration ? window.getTotalDuration() : ((this.videoElement && this.videoElement.duration) ? this.videoElement.duration : 0);
+        if (duration > 0) {
+          const pct = (clampedX - 155) / 710;
+          const targetTime = pct * duration;
+          this.debouncedSeekToTime(targetTime);
+        }
+        this.triggerHapticPulse(controller, 0.5, 30);
+        this.updateVRHUDCanvas();
       }
     }
   }
@@ -807,6 +924,20 @@ class XRVideoPlayer {
     if (this.activeDragController === controller) {
       this.isDragging = false;
       this.activeDragController = null;
+      this.updateVRHUDCanvas();
+    }
+    if (this.activeScrubController === controller) {
+      if (this.pendingSeekTime !== null) {
+        if (window.seekToTime) {
+          window.seekToTime(this.pendingSeekTime);
+        } else if (this.videoElement) {
+          this.videoElement.currentTime = this.pendingSeekTime;
+        }
+        this.pendingSeekTime = null;
+      }
+      this.isScrubbingSeekBar = false;
+      this.activeScrubController = null;
+      this.seekCursorX = null;
       this.updateVRHUDCanvas();
     }
   }

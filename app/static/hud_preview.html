@@ -240,6 +240,8 @@
       let isMuted = false;
       let formatMenuOpen = false;
       let currentHoveredButton = null;
+      let isScrubbingSeekBar = false;
+      let seekCursorX = null;
       let currentTime = 1845;
       let totalDuration = 7200;
 
@@ -343,16 +345,45 @@
         ctx.textAlign = 'right';
         ctx.fillText(formatTime(totalDuration), 964, 105);
 
-        // Horizontally Shrunken Seek Bar Track [x: 155..865] (Width 710px)
+        // 10px Height Seek Bar Track [x: 155..865, y: 95..105] (Width 710px)
         const isSeekHover = (currentHoveredButton === 'seek_bar');
         ctx.fillStyle = isSeekHover ? '#3f4260' : '#2e3046';
-        drawRoundedRect(155, 92, 710, 16, 8, true, isSeekHover, '#818cf8');
+        drawRoundedRect(155, 95, 710, 10, 5, true, isSeekHover, '#818cf8');
 
-        // Filled Progress Bar
+        // Filled Progress Bar (Height 10px)
         if (progressPct > 0) {
           ctx.fillStyle = isSeekHover ? '#818cf8' : '#6366f1';
-          drawRoundedRect(155, 92, Math.max(16, 710 * progressPct), 16, 8, true, false);
+          drawRoundedRect(155, 95, Math.max(10, 710 * progressPct), 10, 5, true, false);
         }
+
+        // 20px Diameter Scrubbing Dot (Radius 10px) centered at y = 100
+        // Follows the cursor position along the timeline ONLY while actively clicking & dragging (isScrubbingSeekBar)
+        let knobX = 155 + 710 * progressPct;
+        if (isScrubbingSeekBar && seekCursorX !== null) {
+          knobX = Math.min(865, Math.max(155, seekCursorX));
+
+          // Target time preview tooltip above scrubber knob while actively dragging
+          if (totalDuration > 0) {
+            const scrubPct = (knobX - 155) / 710;
+            const scrubTime = scrubPct * totalDuration;
+            const timeStr = formatTime(scrubTime);
+
+            ctx.fillStyle = 'rgba(99, 102, 241, 0.95)';
+            drawRoundedRect(knobX - 30, 68, 60, 22, 6, true, false);
+            ctx.fillStyle = '#ffffff';
+            ctx.font = 'bold 12px monospace';
+            ctx.textAlign = 'center';
+            ctx.fillText(timeStr, knobX, 83);
+          }
+        }
+
+        ctx.beginPath();
+        ctx.arc(knobX, 100, 10, 0, Math.PI * 2);
+        ctx.fillStyle = (isSeekHover || isScrubbingSeekBar) ? '#a78bfa' : '#818cf8';
+        ctx.fill();
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = '#ffffff';
+        ctx.stroke();
 
         // 3. Single Unified Controls Row [y: 160..195] (Height 35px - text fitted)
         // Left-Justified Group: Play/Pause, Rewind -30s, Fast-Forward +30s, Mute
@@ -488,7 +519,23 @@
       // Initial Render
       renderHUD();
 
-      // Mouse Move Event on HUD Canvas (Simulates VR Laser Reticle)
+      // Mouse Down (Start Dragging Scrub Bar)
+      canvas.addEventListener('mousedown', (e) => {
+        const rect = canvas.getBoundingClientRect();
+        const scaleX = 1024 / rect.width;
+        const scaleY = 380 / rect.height;
+        const x = (e.clientX - rect.left) * scaleX;
+        const y = (e.clientY - rect.top) * scaleY;
+        const btnId = getButtonIdAt(x, y);
+
+        if (btnId === 'seek_bar') {
+          isScrubbingSeekBar = true;
+          seekCursorX = Math.min(865, Math.max(155, x));
+          renderHUD();
+        }
+      });
+
+      // Mouse Move Event (Hover Detection & Drag Scrubbing)
       canvas.addEventListener('mousemove', (e) => {
         const rect = canvas.getBoundingClientRect();
         const scaleX = 1024 / rect.width;
@@ -497,20 +544,46 @@
         const y = (e.clientY - rect.top) * scaleY;
 
         coordsReadout.textContent = `Canvas Coords: (${Math.round(x)}, ${Math.round(y)})`;
-        const btnId = getButtonIdAt(x, y);
 
-        if (btnId !== currentHoveredButton) {
-          currentHoveredButton = btnId;
-          hoverReadout.textContent = `Hovered Target: ${btnId ? btnId.toUpperCase() : 'NONE'}`;
-          canvas.style.cursor = btnId ? 'pointer' : 'default';
+        if (isScrubbingSeekBar) {
+          seekCursorX = Math.min(865, Math.max(155, x));
           renderHUD();
+        } else {
+          const btnId = getButtonIdAt(x, y);
+          if (btnId !== currentHoveredButton) {
+            currentHoveredButton = btnId;
+            hoverReadout.textContent = `Hovered Target: ${btnId ? btnId.toUpperCase() : 'NONE'}`;
+            canvas.style.cursor = btnId ? 'pointer' : 'default';
+            renderHUD();
+          }
         }
       });
 
+      // Mouse Up & Drag Release Handling
+      const stopScrubbing = () => {
+        if (isScrubbingSeekBar) {
+          if (seekCursorX !== null && totalDuration > 0) {
+            const pct = Math.min(1, Math.max(0, (seekCursorX - 155) / 710));
+            currentTime = pct * totalDuration;
+            sliderTime.value = currentTime;
+            updateTimeLabel();
+            logEvent(`[Action] Seek Bar Drag Release -> Set Time: ${formatTime(currentTime)}`);
+          }
+          isScrubbingSeekBar = false;
+          seekCursorX = null;
+          renderHUD();
+        }
+      };
+
+      window.addEventListener('mouseup', stopScrubbing);
+
       canvas.addEventListener('mouseleave', () => {
-        currentHoveredButton = null;
-        hoverReadout.textContent = `Hovered Target: NONE`;
-        renderHUD();
+        if (!isScrubbingSeekBar) {
+          currentHoveredButton = null;
+          hoverReadout.textContent = `Hovered Target: NONE`;
+          canvas.style.cursor = 'default';
+          renderHUD();
+        }
       });
 
       // Canvas Mouse Click Handler (Simulates VR Controller Trigger Click)
