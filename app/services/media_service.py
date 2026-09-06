@@ -126,6 +126,8 @@ class MediaService:
         if cache_key in MediaService._metadata_cache:
             return MediaService._metadata_cache[cache_key]
 
+        path_hash = hashlib.md5(path_str.encode('utf-8')).hexdigest()
+        thumb_path = THUMBNAIL_DIR / f"{path_hash}.jpg"
         w, h = MediaService.get_image_dimensions_fast(path_str)
         info = {
             "name": entry.name,
@@ -135,7 +137,8 @@ class MediaService:
             "mtime": mtime,
             "width": w,
             "height": h,
-            "extension": os.path.splitext(entry.name)[1].lower()
+            "extension": os.path.splitext(entry.name)[1].lower(),
+            "has_thumbnail": thumb_path.exists() and thumb_path.stat().st_size > 0
         }
 
         MediaService._metadata_cache[cache_key] = info
@@ -156,6 +159,8 @@ class MediaService:
         if cache_key in MediaService._metadata_cache:
             return MediaService._metadata_cache[cache_key]
 
+        path_hash = hashlib.md5(path_str.encode('utf-8')).hexdigest()
+        thumb_path = THUMBNAIL_DIR / f"{path_hash}.jpg"
         w, h = MediaService.get_image_dimensions_fast(path_str)
         info = {
             "name": file_path.name,
@@ -165,7 +170,8 @@ class MediaService:
             "mtime": mtime,
             "width": w,
             "height": h,
-            "extension": file_path.suffix.lower()
+            "extension": file_path.suffix.lower(),
+            "has_thumbnail": thumb_path.exists() and thumb_path.stat().st_size > 0
         }
 
         MediaService._metadata_cache[cache_key] = info
@@ -190,6 +196,9 @@ class MediaService:
         if cache_key in MediaService._metadata_cache:
             return MediaService._metadata_cache[cache_key]
 
+        path_hash = hashlib.md5(path_str.encode('utf-8')).hexdigest()
+        thumb_path = THUMBNAIL_DIR / f"{path_hash}.jpg"
+
         info = {
             "name": file_path.name,
             "path": path_str,
@@ -201,7 +210,8 @@ class MediaService:
             "formatted_duration": "00:00",
             "video_codec": "",
             "audio_codec": "",
-            "mode_3d": MediaService.detect_3d_mode(file_path.name, 0, 0)
+            "mode_3d": MediaService.detect_3d_mode(file_path.name, 0, 0),
+            "has_thumbnail": thumb_path.exists() and thumb_path.stat().st_size > 0
         }
 
         # Try extracting ffprobe metadata if available
@@ -399,26 +409,23 @@ class MediaService:
                         str(thumb_path)
                     ]
                 else:
+                    info = MediaService.get_video_info(path_obj)
+                    duration = info.get("duration", 0)
+                    seek_time = max(5, int(duration * 0.15)) if duration > 10 else 1
+
                     cmd = [
                         "ffmpeg",
                         "-y",
-                        "-noaccurate_seek",
-                        "-ss", "3",
+                        "-ss", str(seek_time),
                         "-i", media_path,
                         "-vframes", "1",
-                        "-q:v", "5",
+                        "-q:v", "4",
                         "-vf", "scale=480:-1",
                         str(thumb_path)
                     ]
-                result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=4)
+                result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=8)
                 if result.returncode == 0 and thumb_path.exists():
                     return thumb_path
-                elif not MediaService.is_image_file(path_obj):
-                    # Fallback seek to 0s for short videos
-                    cmd[4] = "0"
-                    result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=4)
-                    if result.returncode == 0 and thumb_path.exists():
-                        return thumb_path
         except Exception as e:
             print(f"Error generating thumbnail for {media_path}: {e}")
 

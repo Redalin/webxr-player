@@ -731,8 +731,66 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
+  // Thumbnail Lazy-Loading Queue
+  let thumbQueue = [];
+  let activeThumbRequests = 0;
+  const MAX_CONCURRENT_THUMBS = 2;
+  let activeAbortControllers = [];
+
+  function clearThumbnailQueue() {
+    thumbQueue = [];
+    activeAbortControllers.forEach(controller => {
+      try { controller.abort(); } catch (e) {}
+    });
+    activeAbortControllers = [];
+    activeThumbRequests = 0;
+  }
+
+  function lazyLoadThumbnail(mediaPath, imgEl, folderPath) {
+    if (!mediaPath || folderPath !== currentPath) return;
+    thumbQueue.push({ path: mediaPath, imgEl: imgEl, folderPath: folderPath });
+    processThumbQueue();
+  }
+
+  function processThumbQueue() {
+    if (activeThumbRequests >= MAX_CONCURRENT_THUMBS || thumbQueue.length === 0) return;
+
+    const item = thumbQueue.shift();
+    if (!item || item.folderPath !== currentPath) {
+      processThumbQueue();
+      return;
+    }
+
+    activeThumbRequests++;
+    const controller = new AbortController();
+    activeAbortControllers.push(controller);
+
+    const url = `/api/thumbnail?path=${encodeURIComponent(item.path)}`;
+
+    fetch(url, { signal: controller.signal })
+      .then(res => {
+        if (res.ok) {
+          if (item.folderPath === currentPath && item.imgEl && document.body.contains(item.imgEl)) {
+            item.imgEl.src = url + `&t=${Date.now()}`;
+          }
+        }
+      })
+      .catch(err => {
+        if (err.name !== 'AbortError') {
+          console.warn("Thumbnail load error:", item.path, err);
+        }
+      })
+      .finally(() => {
+        const idx = activeAbortControllers.indexOf(controller);
+        if (idx !== -1) activeAbortControllers.splice(idx, 1);
+        activeThumbRequests--;
+        processThumbQueue();
+      });
+  }
+
   // API Call Functions
   async function loadDirectory(path) {
+    clearThumbnailQueue();
     showLoading(true);
     localVideoFiles = [];
 
@@ -838,6 +896,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function renderVideoGrid() {
+    clearThumbnailQueue();
     videoGrid.innerHTML = '';
     const searchQuery = videoSearchInput ? videoSearchInput.value.toLowerCase().trim() : '';
     const filterType = filterMediaType ? filterMediaType.value : 'all';
@@ -902,7 +961,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const card = document.createElement('div');
     card.className = 'video-card image-card';
 
-    const thumbUrl = `/api/thumbnail?path=${encodeURIComponent(img.path)}`;
+    const thumbUrl = img.has_thumbnail
+      ? `/api/thumbnail?path=${encodeURIComponent(img.path)}`
+      : `/api/image?path=${encodeURIComponent(img.path)}`;
 
     card.innerHTML = `
       <div class="thumb-container">
@@ -923,6 +984,10 @@ document.addEventListener('DOMContentLoaded', () => {
         </div>
       </div>
     `;
+
+    if (!img.has_thumbnail) {
+      lazyLoadThumbnail(img.path, card.querySelector('.thumb-img'), currentPath);
+    }
 
     card.addEventListener('click', () => {
       openImageViewer(index, list);
@@ -1057,9 +1122,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const card = document.createElement('div');
     card.className = 'video-card';
 
-    const thumbUrl = video.isLocal
-      ? '/static/img/video-placeholder.svg'
-      : `/api/thumbnail?path=${encodeURIComponent(video.path)}`;
+    let thumbUrl = '/static/img/video-placeholder.svg';
+    if (video.isLocal) {
+      thumbUrl = '/static/img/video-placeholder.svg';
+    } else if (video.has_thumbnail) {
+      thumbUrl = `/api/thumbnail?path=${encodeURIComponent(video.path)}`;
+    }
 
     const is3D = video.mode_3d !== '2d';
     const badgeClass = is3D ? 'badge-3d' : 'badge-2d';
@@ -1067,7 +1135,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     card.innerHTML = `
       <div class="thumb-container">
-        <img class="thumb-img" src="${thumbUrl}" alt="${video.name}" loading="lazy" onerror="this.src='/api/thumbnail?path=${encodeURIComponent(video.path)}'">
+        <img class="thumb-img" src="${thumbUrl}" alt="${video.name}" loading="lazy">
         <div class="play-overlay">
           <div class="play-icon">
             <svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
@@ -1095,6 +1163,10 @@ document.addEventListener('DOMContentLoaded', () => {
         </div>
       </div>
     `;
+
+    if (!video.isLocal && !video.has_thumbnail) {
+      lazyLoadThumbnail(video.path, card.querySelector('.thumb-img'), currentPath);
+    }
 
     // Dropdown change listener
     const modeSelect = card.querySelector('[data-role="mode-select"]');
