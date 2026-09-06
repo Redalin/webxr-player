@@ -1125,14 +1125,15 @@ class XRVideoPlayer {
       return;
     }
 
-    // Trigger 5-second jog step when thumbstick is flicked/tilted left or right
+    // Trigger 5-second video jog step or image prev/next step when thumbstick is flicked/tilted left or right
     if (!this.joystickJogActive || (now - this.lastJoystickJogTime > 250)) {
       if (targetAxisX < -threshold) {
-        // Jog Backward 5 seconds
         this.joystickJogActive = true;
         this.lastJoystickJogTime = now;
 
-        if (window.seekToTime && window.getCurrentTime) {
+        if (window.isImageViewerOpen && window.isImageViewerOpen()) {
+          if (window.showPrevImage) window.showPrevImage();
+        } else if (window.seekToTime && window.getCurrentTime) {
           const current = window.getCurrentTime();
           window.seekToTime(current - 5);
         }
@@ -1143,11 +1144,12 @@ class XRVideoPlayer {
           this.triggerHapticPulse(controllerObj, 0.5, 40);
         }
       } else if (targetAxisX > threshold) {
-        // Jog Forward 5 seconds
         this.joystickJogActive = true;
         this.lastJoystickJogTime = now;
 
-        if (window.seekToTime && window.getCurrentTime) {
+        if (window.isImageViewerOpen && window.isImageViewerOpen()) {
+          if (window.showNextImage) window.showNextImage();
+        } else if (window.seekToTime && window.getCurrentTime) {
           const current = window.getCurrentTime();
           window.seekToTime(current + 5);
         }

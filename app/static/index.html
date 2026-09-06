@@ -55,18 +55,35 @@
   <!-- Main Media Dashboard -->
   <main class="container">
 
-    <!-- Directory Location Breadcrumb & Search Bar -->
+    <!-- Directory Location Breadcrumb & Search / Filter Controls -->
     <div class="location-bar">
       <div class="breadcrumb" id="path-breadcrumb">
         <!-- Rendered dynamically as clickable path segment breadcrumbs by JS -->
       </div>
-      <div class="search-filter">
-        <input type="text" id="video-search-input" placeholder="Search videos in directory...">
-        <select id="filter-3d-mode">
+      <div class="controls-toolbar">
+        <input type="text" id="video-search-input" placeholder="Search media in directory...">
+        <select id="filter-media-type" title="Filter media type">
+          <option value="all">All Media</option>
+          <option value="videos">Videos Only</option>
+          <option value="images">Images Only</option>
+        </select>
+        <select id="filter-3d-mode" title="Filter 3D video formats">
           <option value="all">All Formats</option>
           <option value="3d">3D Videos Only</option>
           <option value="2d">2D Videos Only</option>
         </select>
+        <select id="sort-order" title="Order by">
+          <option value="name_asc">Name (A-Z)</option>
+          <option value="name_desc">Name (Z-A)</option>
+          <option value="date_desc">Date (Newest)</option>
+          <option value="date_asc">Date (Oldest)</option>
+          <option value="size_desc">Size (Largest)</option>
+          <option value="size_asc">Size (Smallest)</option>
+        </select>
+        <div class="thumb-slider-container" title="Adjust thumbnail size">
+          <span class="slider-label">Size:</span>
+          <input type="range" id="thumb-size-slider" min="160" max="480" value="300" step="10">
+        </div>
       </div>
     </div>
 
@@ -177,6 +194,30 @@
             </div>
           </div>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Fullscreen Image Viewer Modal -->
+  <div class="image-modal" id="image-modal">
+    <div class="image-viewer-container">
+      <div class="image-header">
+        <div class="image-info-left">
+          <span class="image-title" id="image-modal-title">Picture Title</span>
+          <span class="image-counter" id="image-modal-counter">1 of 1</span>
+        </div>
+        <div class="image-controls-right">
+          <span class="image-meta" id="image-modal-meta">-- x --</span>
+          <button id="btn-close-image" class="btn-close" title="Close Image Viewer (Esc)">&times;</button>
+        </div>
+      </div>
+      <div class="image-view-wrapper">
+        <button id="btn-img-prev" class="img-nav-btn img-nav-prev" title="Previous Picture (Left Arrow / Joystick Left)">&lsaquo;</button>
+        <div class="image-display-box">
+          <img id="fullscreen-image-element" src="" alt="Full Screen Image">
+        </div>
+        <button id="btn-img-next" class="img-nav-btn img-nav-next" title="Next Picture (Right Arrow / Joystick Right)">&rsaquo;</button>
+      </div>
     </div>
   </div>
 

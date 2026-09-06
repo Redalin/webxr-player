@@ -57,10 +57,23 @@ document.addEventListener('DOMContentLoaded', () => {
   const pathBreadcrumb = document.getElementById('path-breadcrumb');
   const currentPathLabel = document.getElementById('current-path-label');
   const videoSearchInput = document.getElementById('video-search-input');
+  const filterMediaType = document.getElementById('filter-media-type');
   const filter3DMode = document.getElementById('filter-3d-mode');
+  const sortOrder = document.getElementById('sort-order');
+  const thumbSizeSlider = document.getElementById('thumb-size-slider');
   const presetFolders = document.getElementById('preset-folders');
   const httpsWarningBanner = document.getElementById('https-warning-banner');
   const btnSwitchHttps = document.getElementById('btn-switch-https');
+
+  // Image Modal Elements
+  const imageModal = document.getElementById('image-modal');
+  const btnCloseImage = document.getElementById('btn-close-image');
+  const imageModalTitle = document.getElementById('image-modal-title');
+  const imageModalCounter = document.getElementById('image-modal-counter');
+  const imageModalMeta = document.getElementById('image-modal-meta');
+  const fullscreenImageElement = document.getElementById('fullscreen-image-element');
+  const btnImgPrev = document.getElementById('btn-img-prev');
+  const btnImgNext = document.getElementById('btn-img-next');
 
   // Modal Elements
   const fsModal = document.getElementById('fs-modal');
@@ -137,11 +150,18 @@ document.addEventListener('DOMContentLoaded', () => {
   let currentPath = '/media';
   let loadedDirectories = [];
   let loadedVideos = [];
+  let loadedImages = [];
   let localVideoFiles = [];
   let parentDirectory = null;
   let currentPlayingVideo = null;
   let autoHideTimer = null;
   let isSeeking = false;
+
+  // Fullscreen Image Viewer State
+  let activeImageViewerList = [];
+  let currentImageIndex = -1;
+  let gamepadPollInterval = null;
+  let lastGamepadJogTime = 0;
 
   // Check Secure Context (HTTPS or localhost required for WebXR API)
   checkSecureContext();
@@ -256,13 +276,72 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // Search & Filters
+  // Search, Filters, Ordering & Thumbnail Resizing
   if (videoSearchInput) {
     videoSearchInput.addEventListener('input', renderVideoGrid);
+  }
+  if (filterMediaType) {
+    filterMediaType.addEventListener('change', renderVideoGrid);
   }
   if (filter3DMode) {
     filter3DMode.addEventListener('change', renderVideoGrid);
   }
+  if (sortOrder) {
+    sortOrder.addEventListener('change', renderVideoGrid);
+  }
+  if (thumbSizeSlider) {
+    thumbSizeSlider.addEventListener('input', (e) => {
+      document.documentElement.style.setProperty('--thumb-card-width', `${e.target.value}px`);
+    });
+  }
+
+  // Image Viewer Modal Events
+  if (btnCloseImage) {
+    btnCloseImage.addEventListener('click', closeImageViewer);
+  }
+  if (btnImgPrev) {
+    btnImgPrev.addEventListener('click', showPrevImage);
+  }
+  if (btnImgNext) {
+    btnImgNext.addEventListener('click', showNextImage);
+  }
+  if (imageModal) {
+    imageModal.addEventListener('click', (e) => {
+      if (e.target === imageModal || e.target.classList.contains('image-view-wrapper') || e.target.classList.contains('image-display-box')) {
+        closeImageViewer();
+      }
+    });
+  }
+
+  // Global Keyboard Shortcuts (Escape exits fullscreen for image and video, Left/Right for image navigation)
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      if (document.fullscreenElement) {
+        document.exitFullscreen().catch(() => {});
+      }
+      if (window.xrPlayer && window.xrPlayer.xrSession) {
+        window.xrPlayer.exitVR();
+      }
+      if (imageModal && imageModal.classList.contains('active')) {
+        closeImageViewer();
+      }
+      if (playerModal && playerModal.classList.contains('active')) {
+        closePlayerModal();
+      }
+      if (fsModal && fsModal.classList.contains('active')) {
+        fsModal.classList.remove('active');
+      }
+    } else if (imageModal && imageModal.classList.contains('active')) {
+      if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') {
+        e.preventDefault();
+        showPrevImage();
+      } else if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') {
+        e.preventDefault();
+        showNextImage();
+      }
+    }
+  });
 
   // FS Modal Events (Optional)
   if (btnBrowseFS) {
@@ -671,6 +750,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
       loadedDirectories = data.directories || [];
       loadedVideos = data.videos || [];
+      loadedImages = data.images || [];
       renderVideoGrid();
     } catch (err) {
       console.error("Failed to load directory:", err);
@@ -736,25 +816,60 @@ document.addEventListener('DOMContentLoaded', () => {
     renderVideoGrid();
   }
 
+  function sortMediaItems(items) {
+    const order = sortOrder ? sortOrder.value : 'name_asc';
+    return [...items].sort((a, b) => {
+      switch (order) {
+        case 'name_desc':
+          return b.name.localeCompare(a.name, undefined, { numeric: true, sensitivity: 'base' });
+        case 'date_desc':
+          return (b.mtime || 0) - (a.mtime || 0);
+        case 'date_asc':
+          return (a.mtime || 0) - (b.mtime || 0);
+        case 'size_desc':
+          return (b.size || 0) - (a.size || 0);
+        case 'size_asc':
+          return (a.size || 0) - (b.size || 0);
+        case 'name_asc':
+        default:
+          return a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' });
+      }
+    });
+  }
+
   function renderVideoGrid() {
     videoGrid.innerHTML = '';
-    const searchQuery = videoSearchInput.value.toLowerCase().trim();
-    const filterMode = filter3DMode.value;
+    const searchQuery = videoSearchInput ? videoSearchInput.value.toLowerCase().trim() : '';
+    const filterType = filterMediaType ? filterMediaType.value : 'all';
+    const filterMode = filter3DMode ? filter3DMode.value : 'all';
 
-    const filteredDirs = loadedDirectories.filter(dir =>
+    let filteredDirs = sortMediaItems(loadedDirectories.filter(dir =>
       dir.name.toLowerCase().includes(searchQuery)
-    );
+    ));
 
     const allVideos = [...localVideoFiles, ...loadedVideos];
-    const filteredVideos = allVideos.filter(vid => {
+    let filteredVideos = allVideos.filter(vid => {
       const matchesSearch = vid.name.toLowerCase().includes(searchQuery);
-      let matchesFilter = true;
-      if (filterMode === '3d') matchesFilter = vid.mode_3d !== '2d';
-      if (filterMode === '2d') matchesFilter = vid.mode_3d === '2d';
-      return matchesSearch && matchesFilter;
+      let matches3D = true;
+      if (filterMode === '3d') matches3D = vid.mode_3d !== '2d';
+      if (filterMode === '2d') matches3D = vid.mode_3d === '2d';
+      return matchesSearch && matches3D;
     });
 
-    const hasContent = filteredDirs.length > 0 || filteredVideos.length > 0;
+    let filteredImages = loadedImages.filter(img =>
+      img.name.toLowerCase().includes(searchQuery)
+    );
+
+    if (filterType === 'videos') {
+      filteredImages = [];
+    } else if (filterType === 'images') {
+      filteredVideos = [];
+    }
+
+    filteredVideos = sortMediaItems(filteredVideos);
+    filteredImages = sortMediaItems(filteredImages);
+
+    const hasContent = filteredDirs.length > 0 || filteredVideos.length > 0 || filteredImages.length > 0;
 
     if (!hasContent) {
       emptyState.style.display = 'block';
@@ -774,6 +889,133 @@ document.addEventListener('DOMContentLoaded', () => {
       const videoCard = createVideoCard(vid);
       videoGrid.appendChild(videoCard);
     });
+
+    // 3. Render Image Cards
+    filteredImages.forEach((img, idx) => {
+      const imageCard = createImageCard(img, idx, filteredImages);
+      videoGrid.appendChild(imageCard);
+    });
+  }
+
+  function createImageCard(img, index, list) {
+    const card = document.createElement('div');
+    card.className = 'video-card image-card';
+
+    const thumbUrl = `/api/thumbnail?path=${encodeURIComponent(img.path)}`;
+
+    card.innerHTML = `
+      <div class="thumb-container">
+        <img class="thumb-img" src="${thumbUrl}" alt="${img.name}" loading="lazy" onerror="this.src='/api/image?path=${encodeURIComponent(img.path)}'">
+        <div class="play-overlay">
+          <div class="play-icon" style="background: rgba(16, 185, 129, 0.9);">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 3 21 3 21 9"></polyline><polyline points="9 21 3 21 3 15"></polyline><line x1="21" y1="3" x2="14" y2="10"></line><line x1="3" y1="21" x2="10" y2="14"></line></svg>
+          </div>
+        </div>
+        <span class="mode-badge badge-img">IMAGE</span>
+      </div>
+      <div class="video-info">
+        <div class="video-title" title="${img.name}">${img.name}</div>
+        <div class="meta-tags">
+          ${img.width && img.height ? `<span class="meta-tag">${img.width}x${img.height}</span>` : ''}
+          <span class="meta-tag">${img.formatted_size}</span>
+          <span class="meta-tag">${(img.extension || '').toUpperCase()}</span>
+        </div>
+      </div>
+    `;
+
+    card.addEventListener('click', () => {
+      openImageViewer(index, list);
+    });
+
+    return card;
+  }
+
+  function openImageViewer(index, list) {
+    if (!list || list.length === 0) return;
+    activeImageViewerList = list;
+    currentImageIndex = Math.max(0, Math.min(list.length - 1, index));
+    updateImageViewerContent();
+    if (imageModal) imageModal.classList.add('active');
+    startGamepadPolling();
+  }
+
+  function updateImageViewerContent() {
+    if (currentImageIndex < 0 || currentImageIndex >= activeImageViewerList.length) return;
+    const img = activeImageViewerList[currentImageIndex];
+    if (imageModalTitle) {
+      imageModalTitle.textContent = img.name;
+      imageModalTitle.title = img.name;
+    }
+    if (imageModalCounter) {
+      imageModalCounter.textContent = `${currentImageIndex + 1} of ${activeImageViewerList.length}`;
+    }
+    if (imageModalMeta) {
+      const dims = (img.width && img.height) ? `${img.width}x${img.height} • ` : '';
+      imageModalMeta.textContent = `${dims}${img.formatted_size}`;
+    }
+    if (fullscreenImageElement) {
+      fullscreenImageElement.style.opacity = '0.4';
+      fullscreenImageElement.src = `/api/image?path=${encodeURIComponent(img.path)}`;
+      fullscreenImageElement.onload = () => {
+        fullscreenImageElement.style.opacity = '1.0';
+      };
+    }
+  }
+
+  function showPrevImage() {
+    if (activeImageViewerList.length === 0) return;
+    currentImageIndex = (currentImageIndex - 1 + activeImageViewerList.length) % activeImageViewerList.length;
+    updateImageViewerContent();
+  }
+
+  function showNextImage() {
+    if (activeImageViewerList.length === 0) return;
+    currentImageIndex = (currentImageIndex + 1) % activeImageViewerList.length;
+    updateImageViewerContent();
+  }
+
+  function closeImageViewer() {
+    if (imageModal) imageModal.classList.remove('active');
+    stopGamepadPolling();
+  }
+
+  window.showPrevImage = showPrevImage;
+  window.showNextImage = showNextImage;
+  window.isImageViewerOpen = () => imageModal && imageModal.classList.contains('active');
+
+  function startGamepadPolling() {
+    stopGamepadPolling();
+    gamepadPollInterval = setInterval(pollGamepads, 50);
+  }
+
+  function stopGamepadPolling() {
+    if (gamepadPollInterval) {
+      clearInterval(gamepadPollInterval);
+      gamepadPollInterval = null;
+    }
+  }
+
+  function pollGamepads() {
+    if (!imageModal || !imageModal.classList.contains('active')) return;
+    const gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
+    const now = performance.now();
+    if (now - lastGamepadJogTime < 280) return;
+
+    for (let i = 0; i < gamepads.length; i++) {
+      const gp = gamepads[i];
+      if (gp && gp.axes) {
+        const axisX = gp.axes.length >= 4 ? gp.axes[2] : (gp.axes[0] || 0);
+        if (axisX < -0.55) {
+          lastGamepadJogTime = now;
+          showPrevImage();
+          break;
+        } else if (axisX > 0.55) {
+          lastGamepadJogTime = now;
+          showNextImage();
+          break;
+        }
+      }
+    }
   }
 
   function createParentFolderCard(parentPath) {

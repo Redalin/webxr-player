@@ -35,7 +35,7 @@ async def browse(path: Optional[str] = Query(None)):
 @app.get("/api/thumbnail")
 async def get_thumbnail(path: str = Query(...)):
     if not os.path.exists(path):
-        raise HTTPException(status_code=404, detail="Video file not found")
+        raise HTTPException(status_code=404, detail="Media file not found")
     
     thumb_path = MediaService.get_or_generate_thumbnail(path)
     if thumb_path and thumb_path.exists():
@@ -52,6 +52,13 @@ async def get_thumbnail(path: str = Query(...)):
         media_type="image/svg+xml",
         headers={"Cache-Control": "public, max-age=86400"}
     )
+
+@app.get("/api/image")
+async def get_image(path: str = Query(...)):
+    if not os.path.exists(path) or not os.path.isfile(path):
+        raise HTTPException(status_code=404, detail="Image file not found")
+    media_type = get_image_media_type(path)
+    return FileResponse(path, media_type=media_type, headers={"Cache-Control": "public, max-age=86400"})
 
 @app.get("/api/stream")
 async def stream_video(request: Request, path: str = Query(...), ss: float = Query(0.0), force_transcode: bool = Query(False)):
@@ -124,4 +131,14 @@ def get_media_type(file_path: str) -> str:
         '.ts': 'video/mp2t'
     }
     return types.get(ext, 'application/octet-stream')
+
+def get_image_media_type(file_path: str) -> str:
+    ext = os.path.splitext(file_path)[1].lower()
+    types = {
+        '.jpg': 'image/jpeg',
+        '.jpeg': 'image/jpeg',
+        '.png': 'image/png',
+        '.gif': 'image/gif',
+    }
+    return types.get(ext, 'image/jpeg')
 

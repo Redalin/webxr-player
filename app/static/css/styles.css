@@ -298,18 +298,49 @@ body {
   background: var(--bg-hover);
 }
 
-.search-filter {
+.controls-toolbar {
   display: flex;
   gap: 0.75rem;
+  align-items: center;
+  flex-wrap: wrap;
 }
 
-.search-filter input, .search-filter select {
+.controls-toolbar input[type="text"],
+.controls-toolbar select {
   background: var(--bg-card);
   border: 1px solid var(--border-color);
   color: var(--text-main);
   padding: 0.5rem 0.75rem;
   border-radius: 8px;
   outline: none;
+  font-size: 0.88rem;
+}
+
+.controls-toolbar input[type="text"]:focus,
+.controls-toolbar select:focus {
+  border-color: var(--accent-primary);
+}
+
+.thumb-slider-container {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  padding: 0.35rem 0.75rem;
+  border-radius: 8px;
+}
+
+.slider-label {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.thumb-slider-container input[type="range"] {
+  accent-color: var(--accent-primary);
+  width: 100px;
+  cursor: pointer;
 }
 
 .btn-star-icon {
@@ -387,11 +418,16 @@ body {
   color: #ef4444;
 }
 
-/* Video Grid */
+/* Media & Video Grid */
 .video-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(var(--thumb-card-width, 300px), 1fr));
   gap: 1.5rem;
+}
+
+.badge-img {
+  background: #10b981;
+  color: white;
 }
 
 /* Folder Cards on Main Dashboard Grid */
@@ -1180,5 +1216,143 @@ body {
   width: 100% !important;
   height: 100% !important;
   background: transparent !important;
+}
+
+/* Fullscreen Image Viewer Modal */
+.image-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(8, 9, 14, 0.95);
+  backdrop-filter: blur(12px);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 1050;
+  user-select: none;
+}
+
+.image-modal.active {
+  display: flex;
+}
+
+.image-viewer-container {
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.image-header {
+  padding: 1rem 1.75rem;
+  background: rgba(20, 22, 34, 0.85);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--border-color);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  z-index: 10;
+}
+
+.image-info-left {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  overflow: hidden;
+}
+
+.image-title {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--text-main);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 50vw;
+}
+
+.image-counter {
+  background: var(--accent-primary);
+  color: white;
+  font-size: 0.8rem;
+  font-weight: 600;
+  padding: 0.2rem 0.6rem;
+  border-radius: 12px;
+  white-space: nowrap;
+}
+
+.image-controls-right {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+}
+
+.image-meta {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  font-family: monospace;
+}
+
+.image-view-wrapper {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  position: relative;
+  overflow: hidden;
+  padding: 1rem;
+}
+
+.image-display-box {
+  flex: 1;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+#fullscreen-image-element {
+  max-width: 92vw;
+  max-height: 85vh;
+  object-fit: contain;
+  border-radius: 8px;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.7);
+  transition: opacity 0.15s ease, transform 0.15s ease;
+}
+
+.img-nav-btn {
+  background: rgba(24, 25, 36, 0.75);
+  border: 1px solid var(--border-color);
+  color: var(--text-main);
+  font-size: 3rem;
+  line-height: 1;
+  width: 56px;
+  height: 80px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 10;
+  transition: all 0.2s ease;
+  backdrop-filter: blur(8px);
+}
+
+.img-nav-btn:hover {
+  background: var(--accent-primary);
+  border-color: var(--accent-primary);
+  color: white;
+  transform: scale(1.05);
+}
+
+.img-nav-prev {
+  margin-right: 0.5rem;
+}
+
+.img-nav-next {
+  margin-left: 0.5rem;
 }
 

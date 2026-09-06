@@ -8,11 +8,12 @@ from typing import List, Dict, Any, Optional, Tuple
 from concurrent.futures import ThreadPoolExecutor
 
 VIDEO_EXTENSIONS = {'.mp4', '.mkv', '.webm', '.avi', '.mov', '.m4v', '.ts', '.wmv', '.flv', '.vob', '.divx'}
+IMAGE_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.gif'}
 THUMBNAIL_DIR = Path(__file__).parent.parent / ".thumbnails"
 THUMBNAIL_DIR.mkdir(parents=True, exist_ok=True)
 
-MAX_THUMBNAIL_CACHE_MB = 150
-TARGET_THUMBNAIL_CACHE_MB = 100
+MAX_THUMBNAIL_CACHE_MB = 50
+TARGET_THUMBNAIL_CACHE_MB = 35
 MAX_THUMBNAIL_COUNT = 500
 
 class MediaService:
@@ -21,6 +22,10 @@ class MediaService:
     @staticmethod
     def is_video_file(file_path: Path) -> bool:
         return file_path.suffix.lower() in VIDEO_EXTENSIONS
+
+    @staticmethod
+    def is_image_file(file_path: Path) -> bool:
+        return file_path.suffix.lower() in IMAGE_EXTENSIONS
 
     @staticmethod
     def browse_directory(dir_path: str) -> Dict[str, Any]:
@@ -32,6 +37,7 @@ class MediaService:
 
         directories = []
         video_entries = []
+        image_entries = []
 
         try:
             entries = sorted(list(path.iterdir()), key=lambda e: (not e.is_dir(), e.name.lower()))
@@ -43,16 +49,24 @@ class MediaService:
                         "name": entry.name,
                         "path": str(entry.resolve())
                     })
-                elif entry.is_file() and MediaService.is_video_file(entry):
-                    video_entries.append(entry)
+                elif entry.is_file():
+                    if MediaService.is_video_file(entry):
+                        video_entries.append(entry)
+                    elif MediaService.is_image_file(entry):
+                        image_entries.append(entry)
         except PermissionError:
             pass
 
-        # Parallelize metadata scanning for video files
+        # Parallelize metadata scanning for video and image files
         video_files = []
         if video_entries:
             with ThreadPoolExecutor(max_workers=min(8, len(video_entries))) as executor:
                 video_files = list(executor.map(MediaService.get_video_info, video_entries))
+
+        image_files = []
+        if image_entries:
+            with ThreadPoolExecutor(max_workers=min(8, len(image_entries))) as executor:
+                image_files = list(executor.map(MediaService.get_image_info, image_entries))
 
         parent = str(path.parent.resolve()) if path != path.parent else None
 
@@ -60,8 +74,47 @@ class MediaService:
             "current": str(path),
             "parent": parent,
             "directories": directories,
-            "videos": video_files
+            "videos": video_files,
+            "images": image_files
         }
+
+    @staticmethod
+    def get_image_info(file_path: Path) -> Dict[str, Any]:
+        path_str = str(file_path.resolve())
+        try:
+            stat = file_path.stat()
+            file_size = stat.st_size
+            mtime = stat.st_mtime
+        except Exception:
+            file_size = 0
+            mtime = 0
+
+        cache_key = f"img:{path_str}:{mtime}:{file_size}"
+        if cache_key in MediaService._metadata_cache:
+            return MediaService._metadata_cache[cache_key]
+
+        info = {
+            "name": file_path.name,
+            "path": path_str,
+            "size": file_size,
+            "formatted_size": MediaService.format_size(file_size),
+            "mtime": mtime,
+            "width": 0,
+            "height": 0,
+            "extension": file_path.suffix.lower()
+        }
+
+        # Quick ffprobe for dimensions if available
+        ffprobe_data = MediaService.run_ffprobe(path_str)
+        if ffprobe_data:
+            for stream in ffprobe_data.get("streams", []):
+                if stream.get("codec_type") == "video":
+                    info["width"] = int(stream.get("width", 0))
+                    info["height"] = int(stream.get("height", 0))
+                    break
+
+        MediaService._metadata_cache[cache_key] = info
+        return info
 
     @staticmethod
     def get_video_info(file_path: Path) -> Dict[str, Any]:
@@ -260,40 +313,51 @@ class MediaService:
         return "2d"
 
     @staticmethod
-    def get_or_generate_thumbnail(video_path: str) -> Optional[Path]:
-        if not os.path.exists(video_path):
+    def get_or_generate_thumbnail(media_path: str) -> Optional[Path]:
+        if not os.path.exists(media_path):
             return None
 
         # Clean cache if it's growing too large
         MediaService.clean_thumbnail_cache()
 
-        path_hash = hashlib.md5(video_path.encode('utf-8')).hexdigest()
+        path_obj = Path(media_path)
+        path_hash = hashlib.md5(media_path.encode('utf-8')).hexdigest()
         thumb_path = THUMBNAIL_DIR / f"{path_hash}.jpg"
 
         if thumb_path.exists() and thumb_path.stat().st_size > 0:
             return thumb_path
 
-        # Generate thumbnail using ffmpeg with cached metadata
         try:
-            info = MediaService.get_video_info(Path(video_path))
-            duration = info.get("duration", 0)
-            seek_time = max(5, int(duration * 0.15)) if duration > 10 else 1
+            if MediaService.is_image_file(path_obj):
+                cmd = [
+                    "ffmpeg",
+                    "-y",
+                    "-i", media_path,
+                    "-vframes", "1",
+                    "-q:v", "4",
+                    "-vf", "scale='min(480,iw)':-1",
+                    str(thumb_path)
+                ]
+            else:
+                info = MediaService.get_video_info(path_obj)
+                duration = info.get("duration", 0)
+                seek_time = max(5, int(duration * 0.15)) if duration > 10 else 1
 
-            cmd = [
-                "ffmpeg",
-                "-y",
-                "-ss", str(seek_time),
-                "-i", video_path,
-                "-vframes", "1",
-                "-q:v", "4",
-                "-vf", "scale=480:-1",
-                str(thumb_path)
-            ]
+                cmd = [
+                    "ffmpeg",
+                    "-y",
+                    "-ss", str(seek_time),
+                    "-i", media_path,
+                    "-vframes", "1",
+                    "-q:v", "4",
+                    "-vf", "scale=480:-1",
+                    str(thumb_path)
+                ]
             result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=8)
             if result.returncode == 0 and thumb_path.exists():
                 return thumb_path
         except Exception as e:
-            print(f"Error generating thumbnail for {video_path}: {e}")
+            print(f"Error generating thumbnail for {media_path}: {e}")
 
         return None
 
