@@ -33,7 +33,7 @@ async def browse(path: Optional[str] = Query(None)):
     return result
 
 @app.get("/api/thumbnail")
-async def get_thumbnail(path: str = Query(...)):
+def get_thumbnail(path: str = Query(...)):
     if not os.path.exists(path):
         raise HTTPException(status_code=404, detail="Media file not found")
     
@@ -54,7 +54,7 @@ async def get_thumbnail(path: str = Query(...)):
     )
 
 @app.get("/api/image")
-async def get_image(path: str = Query(...)):
+def get_image(path: str = Query(...)):
     if not os.path.exists(path) or not os.path.isfile(path):
         raise HTTPException(status_code=404, detail="Image file not found")
     media_type = get_image_media_type(path)

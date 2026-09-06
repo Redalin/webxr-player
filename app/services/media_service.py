@@ -374,15 +374,15 @@ class MediaService:
         if not os.path.exists(media_path):
             return None
 
-        # Clean cache if it's growing too large
-        MediaService.clean_thumbnail_cache()
-
         path_obj = Path(media_path)
         path_hash = hashlib.md5(media_path.encode('utf-8')).hexdigest()
         thumb_path = THUMBNAIL_DIR / f"{path_hash}.jpg"
 
         if thumb_path.exists() and thumb_path.stat().st_size > 0:
             return thumb_path
+
+        # Clean cache when creating a new thumbnail
+        MediaService.clean_thumbnail_cache()
 
         try:
             if MediaService.is_image_file(path_obj):
