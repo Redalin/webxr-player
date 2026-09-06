@@ -881,7 +881,7 @@ body {
   -webkit-appearance: none;
   appearance: none;
   height: 6px;
-  background: rgba(255, 255, 255, 0.3);
+  background: linear-gradient(to right, var(--accent-primary) var(--seek-pct, 0%), rgba(255, 255, 255, 0.25) var(--seek-pct, 0%));
   border-radius: 3px;
   outline: none;
   cursor: pointer;
@@ -899,6 +899,11 @@ body {
   background: var(--accent-primary);
   cursor: pointer;
   box-shadow: 0 0 8px rgba(99, 102, 241, 0.8);
+}
+.seek-slider::-moz-range-progress {
+  background-color: var(--accent-primary);
+  height: 100%;
+  border-radius: 3px;
 }
 
 .main-controls-row {

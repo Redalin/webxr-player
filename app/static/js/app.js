@@ -182,9 +182,23 @@ document.addEventListener('DOMContentLoaded', () => {
     return webVideoElement ? (webVideoElement.duration || 0) : 0;
   }
 
+  function updateSeekBarProgress(pct) {
+    if (overlaySeekBar) {
+      const clampedPct = Math.min(100, Math.max(0, pct));
+      overlaySeekBar.style.setProperty('--seek-pct', `${clampedPct}%`);
+    }
+  }
+
   function seekToTime(targetTime) {
     const total = getTotalDuration();
     const boundedTarget = Math.max(0, Math.min(total > 0 ? total : 86400, targetTime));
+
+    if (total > 0 && overlaySeekBar) {
+      const pct = (boundedTarget / total) * 100;
+      overlaySeekBar.value = pct;
+      updateSeekBarProgress(pct);
+      if (overlayTimeCurrent) overlayTimeCurrent.textContent = formatTime(boundedTarget);
+    }
 
     if (currentPlayingVideo && (currentPlayingVideo.needs_transcode || webVideoElement.duration === Infinity || isNaN(webVideoElement.duration))) {
       currentVideoOffset = boundedTarget;
@@ -395,7 +409,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // Global Keyboard Shortcuts (Escape exits fullscreen for image and video, Left/Right for image navigation)
+  // Global Keyboard Shortcuts (Escape exits fullscreen for image and video, Left/Right for image/video navigation)
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
       e.preventDefault();
@@ -421,6 +435,26 @@ document.addEventListener('DOMContentLoaded', () => {
       } else if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') {
         e.preventDefault();
         showNextImage();
+      }
+    } else if (playerModal && playerModal.classList.contains('active')) {
+      if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') {
+        e.preventDefault();
+        seekToTime(getCurrentTime() - 5);
+      } else if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') {
+        e.preventDefault();
+        seekToTime(getCurrentTime() + 5);
+      } else if (e.key === ' ' || e.key === 'k' || e.key === 'K') {
+        e.preventDefault();
+        if (webVideoElement) {
+          if (webVideoElement.paused) webVideoElement.play();
+          else webVideoElement.pause();
+        }
+      } else if (e.key === 'm' || e.key === 'M') {
+        e.preventDefault();
+        if (webVideoElement) {
+          webVideoElement.muted = !webVideoElement.muted;
+          updateMuteUI();
+        }
       }
     }
   });
@@ -584,6 +618,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (total > 0 && overlaySeekBar) {
           const pct = (current / total) * 100;
           overlaySeekBar.value = Math.min(100, Math.max(0, pct));
+          updateSeekBarProgress(pct);
           if (overlayTimeCurrent) overlayTimeCurrent.textContent = formatTime(current);
           if (overlayTimeTotal) overlayTimeTotal.textContent = formatTime(total);
         }
@@ -613,18 +648,22 @@ document.addEventListener('DOMContentLoaded', () => {
     
     overlaySeekBar.addEventListener('input', (e) => {
       e.stopPropagation();
+      const pct = parseFloat(e.target.value) || 0;
+      updateSeekBarProgress(pct);
       const total = getTotalDuration();
       if (total > 0) {
-        const targetTime = (e.target.value / 100) * total;
+        const targetTime = (pct / 100) * total;
         if (overlayTimeCurrent) overlayTimeCurrent.textContent = formatTime(targetTime);
       }
     });
 
     overlaySeekBar.addEventListener('change', (e) => {
       e.stopPropagation();
+      const pct = parseFloat(e.target.value) || 0;
+      updateSeekBarProgress(pct);
       const total = getTotalDuration();
       if (total > 0) {
-        const targetTime = (e.target.value / 100) * total;
+        const targetTime = (pct / 100) * total;
         seekToTime(targetTime);
       }
       isSeeking = false;
@@ -1072,6 +1111,7 @@ document.addEventListener('DOMContentLoaded', () => {
   window.showPrevImage = showPrevImage;
   window.showNextImage = showNextImage;
   window.isImageViewerOpen = () => imageModal && imageModal.classList.contains('active');
+  window.isPlayerModalOpen = () => playerModal && playerModal.classList.contains('active');
 
   function startGamepadPolling() {
     stopGamepadPolling();
@@ -1086,24 +1126,53 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function pollGamepads() {
-    if (!imageModal || !imageModal.classList.contains('active')) return;
+    const isPlayerActive = window.isPlayerModalOpen();
+    const isImageActive = window.isImageViewerOpen();
+    if (!isPlayerActive && !isImageActive) return;
+
     const gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
     const now = performance.now();
-    if (now - lastGamepadJogTime < 280) return;
+
+    let maxMagnitude = 0;
+    let targetAxisX = 0;
 
     for (let i = 0; i < gamepads.length; i++) {
       const gp = gamepads[i];
       if (gp && gp.axes) {
-        const axisX = gp.axes.length >= 4 ? gp.axes[2] : (gp.axes[0] || 0);
-        if (axisX < -0.55) {
-          lastGamepadJogTime = now;
-          showPrevImage();
-          break;
-        } else if (axisX > 0.55) {
-          lastGamepadJogTime = now;
-          showNextImage();
-          break;
+        const axes = gp.axes;
+        const axisLeft = axes.length > 0 ? axes[0] : 0;
+        const axisRight = axes.length >= 4 ? axes[2] : 0;
+
+        if (Math.abs(axisLeft) > maxMagnitude) {
+          maxMagnitude = Math.abs(axisLeft);
+          targetAxisX = axisLeft;
         }
+        if (Math.abs(axisRight) > maxMagnitude) {
+          maxMagnitude = Math.abs(axisRight);
+          targetAxisX = axisRight;
+        }
+      }
+    }
+
+    if (maxMagnitude < 0.25) {
+      return;
+    }
+
+    if (now - lastGamepadJogTime < 280) return;
+
+    if (targetAxisX < -0.55) {
+      lastGamepadJogTime = now;
+      if (isImageActive) {
+        showPrevImage();
+      } else if (isPlayerActive) {
+        seekToTime(getCurrentTime() - 5);
+      }
+    } else if (targetAxisX > 0.55) {
+      lastGamepadJogTime = now;
+      if (isImageActive) {
+        showNextImage();
+      } else if (isPlayerActive) {
+        seekToTime(getCurrentTime() + 5);
       }
     }
   }
@@ -1220,6 +1289,12 @@ document.addEventListener('DOMContentLoaded', () => {
     if (overlayModeSelect) overlayModeSelect.value = video.mode_3d;
     updatePlayerBadge(video.mode_3d);
 
+    if (overlaySeekBar) {
+      overlaySeekBar.value = 0;
+      updateSeekBarProgress(0);
+    }
+    startGamepadPolling();
+
     const streamUrl = video.isLocal
       ? video.blobUrl
       : `/api/stream?path=${encodeURIComponent(video.path)}`;
@@ -1236,6 +1311,9 @@ document.addEventListener('DOMContentLoaded', () => {
     playerModal.classList.remove('active');
     currentPlayingVideo = null;
     hideOverlayBar();
+    if (!window.isImageViewerOpen()) {
+      stopGamepadPolling();
+    }
     if (window.xrPlayer) {
       window.xrPlayer.exitVR();
     }
