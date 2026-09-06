@@ -4,6 +4,7 @@ import subprocess
 import json
 import re
 import struct
+import threading
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Tuple
 from concurrent.futures import ThreadPoolExecutor
@@ -19,6 +20,7 @@ MAX_THUMBNAIL_COUNT = 500
 
 class MediaService:
     _metadata_cache: Dict[str, Dict[str, Any]] = {}
+    _thumb_semaphore = threading.Semaphore(4)
 
     @staticmethod
     def is_video_file(file_path: Path) -> bool:
@@ -385,34 +387,38 @@ class MediaService:
         MediaService.clean_thumbnail_cache()
 
         try:
-            if MediaService.is_image_file(path_obj):
-                cmd = [
-                    "ffmpeg",
-                    "-y",
-                    "-i", media_path,
-                    "-vframes", "1",
-                    "-q:v", "4",
-                    "-vf", "scale='min(480,iw)':-1",
-                    str(thumb_path)
-                ]
-            else:
-                info = MediaService.get_video_info(path_obj)
-                duration = info.get("duration", 0)
-                seek_time = max(5, int(duration * 0.15)) if duration > 10 else 1
-
-                cmd = [
-                    "ffmpeg",
-                    "-y",
-                    "-ss", str(seek_time),
-                    "-i", media_path,
-                    "-vframes", "1",
-                    "-q:v", "4",
-                    "-vf", "scale=480:-1",
-                    str(thumb_path)
-                ]
-            result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=8)
-            if result.returncode == 0 and thumb_path.exists():
-                return thumb_path
+            with MediaService._thumb_semaphore:
+                if MediaService.is_image_file(path_obj):
+                    cmd = [
+                        "ffmpeg",
+                        "-y",
+                        "-i", media_path,
+                        "-vframes", "1",
+                        "-q:v", "4",
+                        "-vf", "scale='min(480,iw)':-1",
+                        str(thumb_path)
+                    ]
+                else:
+                    cmd = [
+                        "ffmpeg",
+                        "-y",
+                        "-noaccurate_seek",
+                        "-ss", "3",
+                        "-i", media_path,
+                        "-vframes", "1",
+                        "-q:v", "5",
+                        "-vf", "scale=480:-1",
+                        str(thumb_path)
+                    ]
+                result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=4)
+                if result.returncode == 0 and thumb_path.exists():
+                    return thumb_path
+                elif not MediaService.is_image_file(path_obj):
+                    # Fallback seek to 0s for short videos
+                    cmd[4] = "0"
+                    result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=4)
+                    if result.returncode == 0 and thumb_path.exists():
+                        return thumb_path
         except Exception as e:
             print(f"Error generating thumbnail for {media_path}: {e}")
 
