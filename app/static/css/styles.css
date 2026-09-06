@@ -45,6 +45,23 @@ body {
   z-index: 100;
 }
 
+/* PWA Install Button */
+.btn-pwa-install {
+  background: linear-gradient(135deg, #6366f1 0%, #a855f7 100%);
+  color: #ffffff;
+  border: none;
+  padding: 0.45rem 0.9rem;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 0.9rem;
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.35);
+  transition: all 0.2s ease;
+}
+.btn-pwa-install:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(168, 85, 247, 0.45);
+}
+
 .logo {
   display: flex;
   align-items: center;

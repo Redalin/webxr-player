@@ -4,6 +4,15 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>WebXR 3D Video Streamer</title>
+  <!-- PWA & Mobile Metadata -->
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#6366f1">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="WebXR Player">
+  <link rel="apple-touch-icon" href="/static/icons/icon-192.png">
+  <link rel="icon" type="image/svg+xml" href="/static/icons/icon.svg">
   <link rel="stylesheet" href="/static/css/styles.css">
   <!-- Include Three.js for 3D WebXR rendering -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -19,6 +28,13 @@
         <line x1="12" y1="22.08" x2="12" y2="12"></line>
       </svg>
       <h1>WebXR <span>3D Media Hub</span></h1>
+    </div>
+
+    <!-- PWA Install App Action Button (Shown when browser fires beforeinstallprompt) -->
+    <div id="pwa-install-wrapper" style="display: none;">
+      <button id="btn-install-pwa" class="btn btn-primary btn-pwa-install" title="Install WebXR Player as PWA App">
+        <span class="btn-icon">📲</span><span class="btn-text"> Install App</span>
+      </button>
     </div>
   </header>
 

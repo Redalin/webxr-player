@@ -1,4 +1,51 @@
 document.addEventListener('DOMContentLoaded', () => {
+  // ServiceWorker Registration for PWA
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('/sw.js')
+        .then(reg => console.log('📱 PWA ServiceWorker registered with scope:', reg.scope))
+        .catch(err => console.warn('PWA ServiceWorker registration failed:', err));
+    });
+  }
+
+  // PWA Install Prompt handling
+  let deferredInstallPrompt = null;
+  const pwaInstallWrapper = document.getElementById('pwa-install-wrapper');
+  const btnInstallPWA = document.getElementById('btn-install-pwa');
+
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    deferredInstallPrompt = e;
+    if (pwaInstallWrapper) {
+      pwaInstallWrapper.style.display = 'block';
+    }
+  });
+
+  if (btnInstallPWA) {
+    btnInstallPWA.addEventListener('click', async () => {
+      if (!deferredInstallPrompt) return;
+      deferredInstallPrompt.prompt();
+      const choiceResult = await deferredInstallPrompt.userChoice;
+      if (choiceResult.outcome === 'accepted') {
+        console.log('User accepted PWA installation');
+      } else {
+        console.log('User dismissed PWA installation');
+      }
+      deferredInstallPrompt = null;
+      if (pwaInstallWrapper) {
+        pwaInstallWrapper.style.display = 'none';
+      }
+    });
+  }
+
+  window.addEventListener('appinstalled', () => {
+    console.log('🎉 PWA WebXR Player app was installed!');
+    deferredInstallPrompt = null;
+    if (pwaInstallWrapper) {
+      pwaInstallWrapper.style.display = 'none';
+    }
+  });
+
   // DOM Elements
   const serverPathInput = document.getElementById('server-path-input');
   const btnLoadPath = document.getElementById('btn-load-path');
