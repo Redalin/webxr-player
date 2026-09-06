@@ -46,6 +46,63 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
+  // Thumbnail Lazy-Loading Queue
+  let thumbQueue = [];
+  let activeThumbRequests = 0;
+  const MAX_CONCURRENT_THUMBS = 2;
+  let activeAbortControllers = [];
+
+  function clearThumbnailQueue() {
+    thumbQueue = [];
+    activeAbortControllers.forEach(controller => {
+      try { controller.abort(); } catch (e) {}
+    });
+    activeAbortControllers = [];
+    activeThumbRequests = 0;
+  }
+
+  function lazyLoadThumbnail(mediaPath, imgEl, folderPath) {
+    if (!mediaPath || folderPath !== currentPath) return;
+    thumbQueue.push({ path: mediaPath, imgEl: imgEl, folderPath: folderPath });
+    processThumbQueue();
+  }
+
+  function processThumbQueue() {
+    if (activeThumbRequests >= MAX_CONCURRENT_THUMBS || thumbQueue.length === 0) return;
+
+    const item = thumbQueue.shift();
+    if (!item || item.folderPath !== currentPath) {
+      processThumbQueue();
+      return;
+    }
+
+    activeThumbRequests++;
+    const controller = new AbortController();
+    activeAbortControllers.push(controller);
+
+    const url = `/api/thumbnail?path=${encodeURIComponent(item.path)}`;
+
+    fetch(url, { signal: controller.signal })
+      .then(res => {
+        if (res.ok) {
+          if (item.folderPath === currentPath && item.imgEl && document.body.contains(item.imgEl)) {
+            item.imgEl.src = url + `&t=${Date.now()}`;
+          }
+        }
+      })
+      .catch(err => {
+        if (err.name !== 'AbortError') {
+          console.warn("Thumbnail load error:", item.path, err);
+        }
+      })
+      .finally(() => {
+        const idx = activeAbortControllers.indexOf(controller);
+        if (idx !== -1) activeAbortControllers.splice(idx, 1);
+        activeThumbRequests--;
+        processThumbQueue();
+      });
+  }
+
   // DOM Elements
   const serverPathInput = document.getElementById('server-path-input');
   const btnLoadPath = document.getElementById('btn-load-path');
@@ -147,7 +204,13 @@ document.addEventListener('DOMContentLoaded', () => {
   window.getTotalDuration = getTotalDuration;
 
   // State
-  let currentPath = '/media';
+  let lastSavedPath = '/media';
+  try {
+    lastSavedPath = localStorage.getItem('webxr_last_path') || '/media';
+  } catch (e) {
+    lastSavedPath = '/media';
+  }
+  let currentPath = lastSavedPath;
   let loadedDirectories = [];
   let loadedVideos = [];
   let loadedImages = [];
@@ -163,11 +226,30 @@ document.addEventListener('DOMContentLoaded', () => {
   let gamepadPollInterval = null;
   let lastGamepadJogTime = 0;
 
+  // Floating Back-to-Top Button
+  const btnBackToTop = document.getElementById('btn-back-to-top');
+  if (btnBackToTop) {
+    window.addEventListener('scroll', () => {
+      if (window.scrollY > 250) {
+        btnBackToTop.classList.add('visible');
+      } else {
+        btnBackToTop.classList.remove('visible');
+      }
+    });
+
+    btnBackToTop.addEventListener('click', () => {
+      window.scrollTo({
+        top: 0,
+        behavior: 'smooth'
+      });
+    });
+  }
+
   // Check Secure Context (HTTPS or localhost required for WebXR API)
   checkSecureContext();
 
-  // Initialize
-  loadDirectory('/media');
+  // Initialize Default Page (Restores last saved folder path or /media)
+  loadDirectory(lastSavedPath);
 
   // Event Listeners for optional top bar elements
   if (btnLoadPath) {
@@ -715,89 +797,26 @@ document.addEventListener('DOMContentLoaded', () => {
       pathBreadcrumb.appendChild(segBtn);
     }
 
-    // 4. Append ⬆️ Up Parent Directory Button at end of breadcrumb trail
-    if (parentDirectory) {
-      const upBtn = document.createElement('button');
-      upBtn.className = 'btn-up-icon';
-      upBtn.title = `Go up to parent directory: ${parentDirectory}`;
-      upBtn.innerHTML = '<span>⬆️</span><span class="btn-text"> Up</span>';
-      upBtn.addEventListener('click', () => loadDirectory(parentDirectory));
-      pathBreadcrumb.appendChild(upBtn);
-    }
-
-    // 5. Append ⭐ Star Favorite Button for current path
+    // 4. Append ⭐ Star Favorite Button for current path
     if (btnToggleFavorite) {
       pathBreadcrumb.appendChild(btnToggleFavorite);
     }
   }
 
-  // Thumbnail Lazy-Loading Queue
-  let thumbQueue = [];
-  let activeThumbRequests = 0;
-  const MAX_CONCURRENT_THUMBS = 2;
-  let activeAbortControllers = [];
-
-  function clearThumbnailQueue() {
-    thumbQueue = [];
-    activeAbortControllers.forEach(controller => {
-      try { controller.abort(); } catch (e) {}
-    });
-    activeAbortControllers = [];
-    activeThumbRequests = 0;
-  }
-
-  function lazyLoadThumbnail(mediaPath, imgEl, folderPath) {
-    if (!mediaPath || folderPath !== currentPath) return;
-    thumbQueue.push({ path: mediaPath, imgEl: imgEl, folderPath: folderPath });
-    processThumbQueue();
-  }
-
-  function processThumbQueue() {
-    if (activeThumbRequests >= MAX_CONCURRENT_THUMBS || thumbQueue.length === 0) return;
-
-    const item = thumbQueue.shift();
-    if (!item || item.folderPath !== currentPath) {
-      processThumbQueue();
-      return;
-    }
-
-    activeThumbRequests++;
-    const controller = new AbortController();
-    activeAbortControllers.push(controller);
-
-    const url = `/api/thumbnail?path=${encodeURIComponent(item.path)}`;
-
-    fetch(url, { signal: controller.signal })
-      .then(res => {
-        if (res.ok) {
-          if (item.folderPath === currentPath && item.imgEl && document.body.contains(item.imgEl)) {
-            item.imgEl.src = url + `&t=${Date.now()}`;
-          }
-        }
-      })
-      .catch(err => {
-        if (err.name !== 'AbortError') {
-          console.warn("Thumbnail load error:", item.path, err);
-        }
-      })
-      .finally(() => {
-        const idx = activeAbortControllers.indexOf(controller);
-        if (idx !== -1) activeAbortControllers.splice(idx, 1);
-        activeThumbRequests--;
-        processThumbQueue();
-      });
-  }
-
   // API Call Functions
   async function loadDirectory(path) {
     clearThumbnailQueue();
-    showLoading(true);
     localVideoFiles = [];
+    const loadingTimer = setTimeout(() => showLoading(true), 300);
 
     try {
       const data = await fetchBrowseData(path);
       currentPath = data.current;
       parentDirectory = (data.parent && data.parent !== currentPath) ? data.parent : null;
+      try {
+        localStorage.setItem('webxr_last_path', currentPath);
+      } catch (e) {}
+
       if (serverPathInput) serverPathInput.value = currentPath;
       if (currentPathLabel) {
         currentPathLabel.textContent = currentPath;
@@ -812,8 +831,13 @@ document.addEventListener('DOMContentLoaded', () => {
       renderVideoGrid();
     } catch (err) {
       console.error("Failed to load directory:", err);
-      alert("Error scanning directory: " + err.message);
+      if (path !== '/media') {
+        loadDirectory('/media');
+      } else {
+        alert("Error scanning directory: " + err.message);
+      }
     } finally {
+      clearTimeout(loadingTimer);
       showLoading(false);
     }
   }

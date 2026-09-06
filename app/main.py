@@ -17,6 +17,38 @@ MEDIA_ROOT = os.getenv("MEDIA_DIR", "/media")
 
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
+@app.on_event("startup")
+def ensure_pwa_icons():
+    import struct, zlib
+    icons_dir = STATIC_DIR / "icons"
+    icons_dir.mkdir(parents=True, exist_ok=True)
+    
+    icon_192 = icons_dir / "icon-192.png"
+    if not icon_192.exists():
+        def make_png(width, height, color=(99, 102, 241)):
+            raw_data = bytearray()
+            for y in range(height):
+                raw_data.append(0)
+                for x in range(width):
+                    raw_data.extend(color)
+            compressed = zlib.compress(bytes(raw_data))
+            png = bytearray(b'\x89PNG\r\n\x1a\n')
+            ihdr_data = struct.pack('>IIBBBBB', width, height, 8, 2, 0, 0, 0)
+            ihdr_crc = zlib.crc32(b'IHDR' + ihdr_data)
+            png.extend(struct.pack('>I', len(ihdr_data)) + b'IHDR' + ihdr_data + struct.pack('>I', ihdr_crc))
+            idat_crc = zlib.crc32(b'IDAT' + compressed)
+            png.extend(struct.pack('>I', len(compressed)) + b'IDAT' + compressed + struct.pack('>I', idat_crc))
+            iend_crc = zlib.crc32(b'IEND')
+            png.extend(struct.pack('>I', 0) + b'IEND' + struct.pack('>I', iend_crc))
+            return bytes(png)
+        
+        png192 = make_png(192, 192)
+        png512 = make_png(512, 512)
+        (icons_dir / "icon-192.png").write_bytes(png192)
+        (icons_dir / "icon-512.png").write_bytes(png512)
+        (icons_dir / "icon-maskable-192.png").write_bytes(png192)
+        (icons_dir / "icon-maskable-512.png").write_bytes(png512)
+
 @app.get("/", response_class=HTMLResponse)
 async def read_index():
     index_file = STATIC_DIR / "index.html"
@@ -24,11 +56,28 @@ async def read_index():
         return FileResponse(str(index_file))
     raise HTTPException(status_code=404, detail="Index page not found")
 
+@app.get("/manifest.json")
+async def get_manifest():
+    manifest_file = STATIC_DIR / "manifest.json"
+    if manifest_file.exists():
+        return FileResponse(str(manifest_file), media_type="application/json")
+    raise HTTPException(status_code=404, detail="Manifest file not found")
+
+@app.get("/sw.js")
+async def get_sw():
+    sw_file = STATIC_DIR / "sw.js"
+    if sw_file.exists():
+        return FileResponse(str(sw_file), media_type="application/javascript")
+    raise HTTPException(status_code=404, detail="Service worker file not found")
+
 @app.get("/api/browse")
 async def browse(path: Optional[str] = Query(None)):
-    target_path = path if path else MEDIA_ROOT
+    target_path = path.strip() if path and path.strip() else MEDIA_ROOT
     if not os.path.exists(target_path):
-        target_path = os.getcwd()
+        try:
+            os.makedirs(target_path, exist_ok=True)
+        except Exception:
+            target_path = os.getcwd()
     result = MediaService.browse_directory(target_path)
     return result
 

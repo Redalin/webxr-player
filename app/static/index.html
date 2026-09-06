@@ -30,6 +30,13 @@
       <h1>WebXR <span>3D Media Hub</span></h1>
     </div>
 
+    <!-- Pinned Breadcrumb Trail in Header -->
+    <div class="header-breadcrumb-wrapper">
+      <div class="breadcrumb" id="path-breadcrumb">
+        <!-- Rendered dynamically as clickable path segment breadcrumbs by JS -->
+      </div>
+    </div>
+
     <!-- PWA Install App Action Button (Shown when browser fires beforeinstallprompt) -->
     <div id="pwa-install-wrapper" style="display: none;">
       <button id="btn-install-pwa" class="btn btn-primary btn-pwa-install" title="Install WebXR Player as PWA App">
@@ -57,9 +64,6 @@
 
     <!-- Directory Location Breadcrumb & Search / Filter Controls -->
     <div class="location-bar">
-      <div class="breadcrumb" id="path-breadcrumb">
-        <!-- Rendered dynamically as clickable path segment breadcrumbs by JS -->
-      </div>
       <div class="controls-toolbar">
         <input type="text" id="video-search-input" placeholder="Search media in directory...">
         <select id="filter-media-type" title="Filter media type">
@@ -96,9 +100,8 @@
 
     <!-- Thumbnails & Video Grid -->
     <section class="video-grid" id="video-grid">
-      <div class="loading-spinner" id="loading-spinner">
+      <div class="loading-spinner" id="loading-spinner" style="display: none;">
         <div class="spinner"></div>
-        <p>Scanning directory & extracting video metadata...</p>
       </div>
       <div class="empty-state" id="empty-state" style="display: none;">
         <svg viewBox="0 0 24 24" width="64" height="64" stroke="currentColor" stroke-width="1.5" fill="none">
@@ -223,6 +226,13 @@
 
   <!-- WebXR Canvas Container (Hidden by default, used when in VR mode) -->
   <div id="xr-canvas-container" style="display: none;"></div>
+
+  <!-- Floating Back-to-Top Button -->
+  <button id="btn-back-to-top" class="back-to-top-btn" title="Back to top" aria-label="Back to top">
+    <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+      <polyline points="18 15 12 9 6 15"></polyline>
+    </svg>
+  </button>
 
   <!-- Scripts -->
   <script src="/static/js/xr-player.js"></script>
