@@ -878,23 +878,24 @@ document.addEventListener('DOMContentLoaded', () => {
 
     emptyState.style.display = 'none';
 
+    const fragment = document.createDocumentFragment();
+
     // 1. Render Subfolder Cards
     filteredDirs.forEach(dir => {
-      const folderCard = createFolderCard(dir);
-      videoGrid.appendChild(folderCard);
+      fragment.appendChild(createFolderCard(dir));
     });
 
     // 2. Render Video Cards
     filteredVideos.forEach(vid => {
-      const videoCard = createVideoCard(vid);
-      videoGrid.appendChild(videoCard);
+      fragment.appendChild(createVideoCard(vid));
     });
 
     // 3. Render Image Cards
     filteredImages.forEach((img, idx) => {
-      const imageCard = createImageCard(img, idx, filteredImages);
-      videoGrid.appendChild(imageCard);
+      fragment.appendChild(createImageCard(img, idx, filteredImages));
     });
+
+    videoGrid.appendChild(fragment);
   }
 
   function createImageCard(img, index, list) {

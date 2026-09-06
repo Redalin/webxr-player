@@ -3,6 +3,7 @@ import hashlib
 import subprocess
 import json
 import re
+import struct
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Tuple
 from concurrent.futures import ThreadPoolExecutor
@@ -35,48 +36,108 @@ class MediaService:
             if not path.exists():
                 path = Path(os.getcwd()).resolve()
 
+        dir_str = str(path)
         directories = []
         video_entries = []
-        image_entries = []
+        image_files = []
 
         try:
-            entries = sorted(list(path.iterdir()), key=lambda e: (not e.is_dir(), e.name.lower()))
-            for entry in entries:
-                if entry.name.startswith('.'):
-                    continue
-                if entry.is_dir():
-                    directories.append({
-                        "name": entry.name,
-                        "path": str(entry.resolve())
-                    })
-                elif entry.is_file():
-                    if MediaService.is_video_file(entry):
-                        video_entries.append(entry)
-                    elif MediaService.is_image_file(entry):
-                        image_entries.append(entry)
+            with os.scandir(dir_str) as entries:
+                sorted_entries = sorted(entries, key=lambda e: (not e.is_dir(), e.name.lower()))
+                for entry in sorted_entries:
+                    if entry.name.startswith('.'):
+                        continue
+                    if entry.is_dir():
+                        directories.append({
+                            "name": entry.name,
+                            "path": entry.path
+                        })
+                    elif entry.is_file():
+                        ext = os.path.splitext(entry.name)[1].lower()
+                        if ext in VIDEO_EXTENSIONS:
+                            video_entries.append(entry)
+                        elif ext in IMAGE_EXTENSIONS:
+                            image_files.append(MediaService.get_image_info_fast(entry))
         except PermissionError:
             pass
 
-        # Parallelize metadata scanning for video and image files
+        # Parallelize metadata scanning for video files
         video_files = []
         if video_entries:
-            with ThreadPoolExecutor(max_workers=min(8, len(video_entries))) as executor:
-                video_files = list(executor.map(MediaService.get_video_info, video_entries))
-
-        image_files = []
-        if image_entries:
-            with ThreadPoolExecutor(max_workers=min(8, len(image_entries))) as executor:
-                image_files = list(executor.map(MediaService.get_image_info, image_entries))
+            with ThreadPoolExecutor(max_workers=min(16, len(video_entries))) as executor:
+                video_files = list(executor.map(MediaService.get_video_info_fast, video_entries))
 
         parent = str(path.parent.resolve()) if path != path.parent else None
 
         return {
-            "current": str(path),
+            "current": dir_str,
             "parent": parent,
             "directories": directories,
             "videos": video_files,
             "images": image_files
         }
+
+    @staticmethod
+    def get_image_dimensions_fast(file_path: str) -> Tuple[int, int]:
+        try:
+            with open(file_path, 'rb') as f:
+                data = f.read(2048)
+                if data.startswith(b'\x89PNG\r\n\x1a\n'):
+                    if len(data) >= 24:
+                        return struct.unpack('>II', data[16:24])
+                elif data.startswith(b'GIF87a') or data.startswith(b'GIF89a'):
+                    if len(data) >= 10:
+                        return struct.unpack('<HH', data[6:10])
+                elif data.startswith(b'\xff\xd8'):
+                    idx = 2
+                    while idx < len(data) - 9:
+                        if data[idx] != 0xff:
+                            idx += 1
+                            continue
+                        marker = data[idx+1]
+                        if marker in (0xc0, 0xc1, 0xc2, 0xc3, 0xc5, 0xc6, 0xc7, 0xc9, 0xca, 0xcb):
+                            h, w = struct.unpack('>HH', data[idx+5:idx+9])
+                            return w, h
+                        elif marker in (0xd8, 0xd9, 0x00):
+                            idx += 2
+                        else:
+                            if idx + 4 > len(data):
+                                break
+                            length = struct.unpack('>H', data[idx+2:idx+4])[0]
+                            idx += 2 + length
+        except Exception:
+            pass
+        return 0, 0
+
+    @staticmethod
+    def get_image_info_fast(entry: os.DirEntry) -> Dict[str, Any]:
+        path_str = entry.path
+        try:
+            stat = entry.stat()
+            file_size = stat.st_size
+            mtime = stat.st_mtime
+        except Exception:
+            file_size = 0
+            mtime = 0
+
+        cache_key = f"img:{path_str}:{mtime}:{file_size}"
+        if cache_key in MediaService._metadata_cache:
+            return MediaService._metadata_cache[cache_key]
+
+        w, h = MediaService.get_image_dimensions_fast(path_str)
+        info = {
+            "name": entry.name,
+            "path": path_str,
+            "size": file_size,
+            "formatted_size": MediaService.format_size(file_size),
+            "mtime": mtime,
+            "width": w,
+            "height": h,
+            "extension": os.path.splitext(entry.name)[1].lower()
+        }
+
+        MediaService._metadata_cache[cache_key] = info
+        return info
 
     @staticmethod
     def get_image_info(file_path: Path) -> Dict[str, Any]:
@@ -93,28 +154,24 @@ class MediaService:
         if cache_key in MediaService._metadata_cache:
             return MediaService._metadata_cache[cache_key]
 
+        w, h = MediaService.get_image_dimensions_fast(path_str)
         info = {
             "name": file_path.name,
             "path": path_str,
             "size": file_size,
             "formatted_size": MediaService.format_size(file_size),
             "mtime": mtime,
-            "width": 0,
-            "height": 0,
+            "width": w,
+            "height": h,
             "extension": file_path.suffix.lower()
         }
 
-        # Quick ffprobe for dimensions if available
-        ffprobe_data = MediaService.run_ffprobe(path_str)
-        if ffprobe_data:
-            for stream in ffprobe_data.get("streams", []):
-                if stream.get("codec_type") == "video":
-                    info["width"] = int(stream.get("width", 0))
-                    info["height"] = int(stream.get("height", 0))
-                    break
-
         MediaService._metadata_cache[cache_key] = info
         return info
+
+    @staticmethod
+    def get_video_info_fast(entry: os.DirEntry) -> Dict[str, Any]:
+        return MediaService.get_video_info(Path(entry.path))
 
     @staticmethod
     def get_video_info(file_path: Path) -> Dict[str, Any]:
@@ -274,7 +331,7 @@ class MediaService:
                 "-show_streams",
                 video_path
             ]
-            result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=5)
+            result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=1.5)
             if result.returncode == 0:
                 return json.loads(result.stdout)
         except Exception:
