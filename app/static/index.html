@@ -215,11 +215,27 @@
         </div>
       </div>
       <div class="image-view-wrapper">
-        <button id="btn-img-prev" class="img-nav-btn img-nav-prev" title="Previous Picture (Left Arrow / Joystick Left)">&lsaquo;</button>
+        <button id="btn-img-prev" class="img-nav-btn img-nav-prev" title="Previous Picture (Left Arrow / Joystick Left)" aria-label="Previous Picture">
+          <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="15 18 9 12 15 6"></polyline>
+          </svg>
+        </button>
         <div class="image-display-box">
           <img id="fullscreen-image-element" src="" alt="Full Screen Image">
+          <button id="btn-img-fullscreen" class="img-fullscreen-btn" title="Toggle Fullscreen" aria-label="Toggle Fullscreen">
+            <svg class="fullscreen-icon" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="15 3 21 3 21 9"></polyline>
+              <line x1="14" y1="10" x2="21" y2="3"></line>
+              <polyline points="9 21 3 21 3 15"></polyline>
+              <line x1="10" y1="14" x2="3" y2="21"></line>
+            </svg>
+          </button>
         </div>
-        <button id="btn-img-next" class="img-nav-btn img-nav-next" title="Next Picture (Right Arrow / Joystick Right)">&rsaquo;</button>
+        <button id="btn-img-next" class="img-nav-btn img-nav-next" title="Next Picture (Right Arrow / Joystick Right)" aria-label="Next Picture">
+          <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="9 18 15 12 9 6"></polyline>
+          </svg>
+        </button>
       </div>
     </div>
   </div>

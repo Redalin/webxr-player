@@ -131,6 +131,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const fullscreenImageElement = document.getElementById('fullscreen-image-element');
   const btnImgPrev = document.getElementById('btn-img-prev');
   const btnImgNext = document.getElementById('btn-img-next');
+  const btnImgFullscreen = document.getElementById('btn-img-fullscreen');
 
   // Modal Elements
   const fsModal = document.getElementById('fs-modal');
@@ -401,8 +402,12 @@ document.addEventListener('DOMContentLoaded', () => {
   if (btnImgNext) {
     btnImgNext.addEventListener('click', showNextImage);
   }
+  if (btnImgFullscreen) {
+    btnImgFullscreen.addEventListener('click', toggleImageFullscreen);
+  }
   if (imageModal) {
     imageModal.addEventListener('click', (e) => {
+      if (e.target.closest('#btn-img-fullscreen')) return;
       if (e.target === imageModal || e.target.classList.contains('image-view-wrapper') || e.target.classList.contains('image-display-box')) {
         closeImageViewer();
       }
@@ -1103,7 +1108,61 @@ document.addEventListener('DOMContentLoaded', () => {
     updateImageViewerContent();
   }
 
+  function toggleImageFullscreen(e) {
+    if (e) e.stopPropagation();
+    if (!document.fullscreenElement && !document.webkitFullscreenElement) {
+      if (imageModal && imageModal.requestFullscreen) {
+        imageModal.requestFullscreen();
+      } else if (imageModal && imageModal.webkitRequestFullscreen) {
+        imageModal.webkitRequestFullscreen();
+      }
+    } else {
+      if (document.exitFullscreen) {
+        document.exitFullscreen().catch(() => {});
+      } else if (document.webkitExitFullscreen) {
+        document.webkitExitFullscreen().catch(() => {});
+      }
+    }
+  }
+
+  function updateFullscreenButtonState() {
+    if (!btnImgFullscreen) return;
+    const isFS = !!(document.fullscreenElement || document.webkitFullscreenElement);
+    btnImgFullscreen.title = isFS ? "Exit Fullscreen" : "Toggle Fullscreen";
+    btnImgFullscreen.setAttribute('aria-label', isFS ? "Exit Fullscreen" : "Toggle Fullscreen");
+
+    if (isFS) {
+      btnImgFullscreen.innerHTML = `
+        <svg class="fullscreen-icon" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="20 10 14 10 14 4"></polyline>
+          <line x1="21" y1="3" x2="14" y2="10"></line>
+          <polyline points="4 14 10 14 10 20"></polyline>
+          <line x1="3" y1="21" x2="10" y2="14"></line>
+        </svg>
+      `;
+    } else {
+      btnImgFullscreen.innerHTML = `
+        <svg class="fullscreen-icon" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="15 3 21 3 21 9"></polyline>
+          <line x1="14" y1="10" x2="21" y2="3"></line>
+          <polyline points="9 21 3 21 3 15"></polyline>
+          <line x1="10" y1="14" x2="3" y2="21"></line>
+        </svg>
+      `;
+    }
+  }
+
+  document.addEventListener('fullscreenchange', updateFullscreenButtonState);
+  document.addEventListener('webkitfullscreenchange', updateFullscreenButtonState);
+
   function closeImageViewer() {
+    if (document.fullscreenElement || document.webkitFullscreenElement) {
+      if (document.exitFullscreen) {
+        document.exitFullscreen().catch(() => {});
+      } else if (document.webkitExitFullscreen) {
+        document.webkitExitFullscreen().catch(() => {});
+      }
+    }
     if (imageModal) imageModal.classList.remove('active');
     stopGamepadPolling();
   }

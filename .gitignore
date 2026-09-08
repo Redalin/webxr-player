@@ -10,6 +10,7 @@ ENV/
 .venv/
 
 # App Generated Cache & Certs
+.thumbnails/
 app/.thumbnails/
 certs/
 *.pem
