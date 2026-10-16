@@ -213,12 +213,16 @@ class XRVideoPlayer {
     return mode === '2d_passthrough';
   }
 
-  async setProjectionMode(newMode) {
+  async setProjectionMode(newMode, notifyApp = true) {
     const oldMode = this.mode3D;
     const oldIsPassthrough = this.isPassthroughMode(oldMode);
     const newIsPassthrough = this.isPassthroughMode(newMode);
 
     this.mode3D = newMode;
+
+    if (notifyApp && window.switchPlayerMode) {
+      window.switchPlayerMode(newMode, true);
+    }
 
     // If switching between VR mode (immersive-vr) and Passthrough mode (immersive-ar),
     // restart the WebXR session seamlessly so Meta Quest hardware compositor switches modes.
@@ -984,7 +988,7 @@ class XRVideoPlayer {
         return;
       } else if (btnId && btnId.startsWith('fmt_')) {
         const mode = btnId.replace('fmt_', '');
-        this.setProjectionMode(mode);
+        this.setProjectionMode(mode, true);
         this.formatMenuOpen = false;
         this.updateVRHUDCanvas();
         return;

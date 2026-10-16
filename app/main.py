@@ -110,14 +110,35 @@ def get_image(path: str = Query(...)):
     return FileResponse(path, media_type=media_type, headers={"Cache-Control": "public, max-age=86400"})
 
 @app.get("/api/stream")
-async def stream_video(request: Request, path: str = Query(...), ss: float = Query(0.0), force_transcode: bool = Query(False)):
+async def stream_video(
+    request: Request,
+    path: str = Query(...),
+    ss: float = Query(0.0),
+    force_transcode: bool = Query(False),
+    mode_3d: Optional[str] = Query(None),
+    direct: bool = Query(False)
+):
     if not os.path.exists(path) or not os.path.isfile(path):
         raise HTTPException(status_code=404, detail="Video file not found")
 
+    is_3d = False
+    if mode_3d and MediaService.is_3d_mode(mode_3d):
+        is_3d = True
+    else:
+        info = MediaService.get_video_info(Path(path))
+        if MediaService.is_3d_mode(info.get("mode_3d")):
+            is_3d = True
+
     needs_transcode, _, _ = MediaService.should_transcode(path)
 
-    # Route incompatible formats (e.g. MKV with AC3/DTS audio, AVI MPEG4, WMV) through FFmpeg on-the-fly streaming
-    if force_transcode or needs_transcode or ss > 0:
+    # Route incompatible formats through FFmpeg on-the-fly streaming,
+    # but NEVER transcode any 3D video files or when direct streaming is requested.
+    if is_3d or direct:
+        use_transcode = False
+    else:
+        use_transcode = force_transcode or needs_transcode or ss > 0
+
+    if use_transcode:
         headers = {
             "Content-Type": "video/mp4",
             "Accept-Ranges": "none",
@@ -129,12 +150,16 @@ async def stream_video(request: Request, path: str = Query(...), ss: float = Que
             headers=headers
         )
 
-    # Native direct Range Streaming for browser-compatible files (.mp4 with H.264/AAC)
+    # Native direct Range Streaming for browser-compatible files (.mp4 with H.264/AAC, WebM, 3D files)
     file_size = os.path.getsize(path)
     range_header = request.headers.get('range')
 
     if not range_header:
-        return FileResponse(path, media_type=get_media_type(path))
+        return FileResponse(
+            path,
+            media_type=get_media_type(path),
+            headers={"Accept-Ranges": "bytes"}
+        )
 
     range_match = range_header.replace('bytes=', '').split('-')
     start = int(range_match[0]) if range_match[0] else 0
@@ -173,11 +198,14 @@ def get_media_type(file_path: str) -> str:
     ext = os.path.splitext(file_path)[1].lower()
     types = {
         '.mp4': 'video/mp4',
+        '.m4v': 'video/mp4',
         '.webm': 'video/webm',
         '.mkv': 'video/x-matroska',
         '.mov': 'video/quicktime',
         '.avi': 'video/x-msvideo',
-        '.ts': 'video/mp2t'
+        '.ts': 'video/mp2t',
+        '.wmv': 'video/x-ms-wmv',
+        '.flv': 'video/x-flv'
     }
     return types.get(ext, 'application/octet-stream')
 

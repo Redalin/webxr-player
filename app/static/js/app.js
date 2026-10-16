@@ -190,6 +190,11 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
+  function is3DMode(mode) {
+    if (!mode) return false;
+    return mode !== '2d' && mode !== '2d_passthrough';
+  }
+
   function seekToTime(targetTime) {
     const total = getTotalDuration();
     const boundedTarget = Math.max(0, Math.min(total > 0 ? total : 86400, targetTime));
@@ -201,7 +206,9 @@ document.addEventListener('DOMContentLoaded', () => {
       if (overlayTimeCurrent) overlayTimeCurrent.textContent = formatTime(boundedTarget);
     }
 
-    if (currentPlayingVideo && (currentPlayingVideo.needs_transcode || webVideoElement.duration === Infinity || isNaN(webVideoElement.duration))) {
+    const is3D = currentPlayingVideo && is3DMode(currentPlayingVideo.mode_3d);
+
+    if (!is3D && currentPlayingVideo && (currentPlayingVideo.needs_transcode || webVideoElement.duration === Infinity || isNaN(webVideoElement.duration))) {
       currentVideoOffset = boundedTarget;
       webVideoElement.src = `/api/stream?path=${encodeURIComponent(currentPlayingVideo.path)}&ss=${boundedTarget}`;
       webVideoElement.play().catch(e => console.log(e));
@@ -217,6 +224,7 @@ document.addEventListener('DOMContentLoaded', () => {
   window.seekToTime = seekToTime;
   window.getCurrentTime = getCurrentTime;
   window.getTotalDuration = getTotalDuration;
+  window.is3DMode = is3DMode;
 
   // State
   let lastSavedPath = '/media';
@@ -509,6 +517,9 @@ document.addEventListener('DOMContentLoaded', () => {
   if (btnEnterWebXR) {
     btnEnterWebXR.addEventListener('click', () => {
       const selectedMode = playerModeSelect ? playerModeSelect.value : (currentPlayingVideo ? currentPlayingVideo.mode_3d : '2d');
+      if (is3DMode(selectedMode)) {
+        ensureDirectStreaming(selectedMode);
+      }
       if (!window.isSecureContext) {
         if (confirm("WebXR requires HTTPS context! Switch to https://" + window.location.hostname + ":8443 now?")) {
           window.location.href = `https://${window.location.hostname}:8443`;
@@ -675,6 +686,74 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+  function ensureDirectStreaming(mode) {
+    if (!currentPlayingVideo || currentPlayingVideo.isLocal) return;
+    currentPlayingVideo.needs_transcode = false;
+
+    const targetMode = mode || currentPlayingVideo.mode_3d;
+    const directUrl = `/api/stream?path=${encodeURIComponent(currentPlayingVideo.path)}&direct=true&mode_3d=${encodeURIComponent(targetMode)}`;
+
+    const currentSrc = webVideoElement ? webVideoElement.src : '';
+    const isAlreadyDirect = currentSrc.includes('direct=true') && currentVideoOffset === 0;
+
+    if (isAlreadyDirect) {
+      return;
+    }
+
+    const targetTime = getCurrentTime();
+    const wasPaused = webVideoElement ? webVideoElement.paused : false;
+
+    currentVideoOffset = 0;
+
+    if (webVideoElement) {
+      let restored = false;
+      const restorePlayback = () => {
+        if (restored) return;
+        restored = true;
+        webVideoElement.removeEventListener('loadedmetadata', restorePlayback);
+        webVideoElement.removeEventListener('canplay', restorePlayback);
+        if (targetTime > 0) {
+          try {
+            webVideoElement.currentTime = targetTime;
+          } catch (e) {
+            console.warn("Could not seek direct stream:", e);
+          }
+        }
+        if (!wasPaused) {
+          webVideoElement.play().catch(e => console.log("Direct stream play error:", e));
+        }
+      };
+
+      webVideoElement.addEventListener('loadedmetadata', restorePlayback, { once: true });
+      webVideoElement.addEventListener('canplay', restorePlayback, { once: true });
+      webVideoElement.src = directUrl;
+      webVideoElement.load();
+    }
+  }
+
+  function switchPlayerMode(newMode, fromXR = false) {
+    if (!currentPlayingVideo) return;
+    currentPlayingVideo.mode_3d = newMode;
+
+    if (playerModeSelect) playerModeSelect.value = newMode;
+    if (overlayModeSelect) overlayModeSelect.value = newMode;
+    updatePlayerBadge(newMode);
+    updateFormatDropdownActiveState();
+
+    const isNow3D = is3DMode(newMode);
+    if (isNow3D) {
+      currentPlayingVideo.needs_transcode = false;
+      ensureDirectStreaming(newMode);
+    }
+
+    if (!fromXR && window.xrPlayer) {
+      window.xrPlayer.setProjectionMode(newMode, false);
+    }
+  }
+
+  window.switchPlayerMode = switchPlayerMode;
+  window.ensureDirectStreaming = ensureDirectStreaming;
+
   // 3D Projection Selection Menu (Attached to top header Mode Badge)
   const overlayFormatDropdown = document.getElementById('overlay-format-dropdown');
 
@@ -690,16 +769,8 @@ document.addEventListener('DOMContentLoaded', () => {
       opt.addEventListener('click', (e) => {
         e.stopPropagation();
         const newMode = opt.getAttribute('data-value');
-        if (playerModeSelect) playerModeSelect.value = newMode;
-        if (currentPlayingVideo) {
-          currentPlayingVideo.mode_3d = newMode;
-          updatePlayerBadge(newMode);
-        }
-        if (window.xrPlayer) {
-          window.xrPlayer.setProjectionMode(newMode);
-        }
+        switchPlayerMode(newMode);
         overlayFormatDropdown.classList.add('hidden');
-        updateFormatDropdownActiveState();
       });
     });
 
@@ -725,15 +796,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   if (playerModeSelect) {
     playerModeSelect.addEventListener('change', (e) => {
-      const newMode = e.target.value;
-      if (currentPlayingVideo) {
-        currentPlayingVideo.mode_3d = newMode;
-        updatePlayerBadge(newMode);
-      }
-      if (window.xrPlayer) {
-        window.xrPlayer.setProjectionMode(newMode);
-      }
-      updateFormatDropdownActiveState();
+      switchPlayerMode(e.target.value);
     });
   }
 
@@ -1281,7 +1344,7 @@ document.addEventListener('DOMContentLoaded', () => {
       thumbUrl = `/api/thumbnail?path=${encodeURIComponent(video.path)}`;
     }
 
-    const is3D = video.mode_3d !== '2d';
+    const is3D = is3DMode(video.mode_3d);
     const badgeClass = is3D ? 'badge-3d' : 'badge-2d';
     const badgeText = get3DBadgeText(video.mode_3d);
 
@@ -1325,9 +1388,12 @@ document.addEventListener('DOMContentLoaded', () => {
     modeSelect.addEventListener('click', (e) => e.stopPropagation());
     modeSelect.addEventListener('change', (e) => {
       video.mode_3d = e.target.value;
+      if (is3DMode(video.mode_3d)) {
+        video.needs_transcode = false;
+      }
       const badgeEl = card.querySelector('.mode-badge');
       badgeEl.textContent = get3DBadgeText(video.mode_3d);
-      badgeEl.className = `mode-badge ${video.mode_3d !== '2d' ? 'badge-3d' : 'badge-2d'}`;
+      badgeEl.className = `mode-badge ${is3DMode(video.mode_3d) ? 'badge-3d' : 'badge-2d'}`;
     });
 
     // Card click opens player
@@ -1347,6 +1413,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (playerModeSelect) playerModeSelect.value = video.mode_3d;
     if (overlayModeSelect) overlayModeSelect.value = video.mode_3d;
     updatePlayerBadge(video.mode_3d);
+    updateFormatDropdownActiveState();
 
     if (overlaySeekBar) {
       overlaySeekBar.value = 0;
@@ -1354,9 +1421,18 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     startGamepadPolling();
 
+    const is3D = is3DMode(video.mode_3d);
+    if (is3D) {
+      video.needs_transcode = false;
+    }
+
     const streamUrl = video.isLocal
       ? video.blobUrl
-      : `/api/stream?path=${encodeURIComponent(video.path)}`;
+      : (is3D
+          ? `/api/stream?path=${encodeURIComponent(video.path)}&direct=true&mode_3d=${encodeURIComponent(video.mode_3d)}`
+          : (video.needs_transcode
+              ? `/api/stream?path=${encodeURIComponent(video.path)}`
+              : `/api/stream?path=${encodeURIComponent(video.path)}&direct=true`));
 
     webVideoElement.src = streamUrl;
     playerModal.classList.add('active');

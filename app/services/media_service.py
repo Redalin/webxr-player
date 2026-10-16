@@ -241,6 +241,12 @@ class MediaService:
         return info
 
     @staticmethod
+    def is_3d_mode(mode: Optional[str]) -> bool:
+        if not mode:
+            return False
+        return mode not in ("2d", "2d_passthrough")
+
+    @staticmethod
     def should_transcode(video_path: str, info_dict: Optional[Dict[str, Any]] = None) -> Tuple[bool, bool, bool]:
         """
         Returns (needs_transcode, copy_video, copy_audio)
@@ -250,6 +256,14 @@ class MediaService:
         """
         ext = os.path.splitext(video_path)[1].lower()
         info = info_dict if info_dict is not None else MediaService.get_video_info(Path(video_path))
+
+        mode_3d = info.get("mode_3d", "")
+        if not mode_3d:
+            mode_3d = MediaService.detect_3d_mode(os.path.basename(video_path), info.get("width", 0), info.get("height", 0))
+
+        # Do not transcode any 3D video files
+        if MediaService.is_3d_mode(mode_3d):
+            return (False, True, True)
 
         video_codec = info.get("video_codec", "").lower()
         audio_codec = info.get("audio_codec", "").lower()
