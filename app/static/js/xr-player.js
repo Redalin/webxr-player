@@ -338,23 +338,35 @@ class XRVideoPlayer {
     // Create / update or clear animated floor effect based on 2D mode
     this.setupFloorEffect();
 
+    // Clean up existing video meshes and materials
+    if (this.leftMesh) {
+      this.scene.remove(this.leftMesh);
+      if (this.leftMesh.geometry) this.leftMesh.geometry.dispose();
+      if (this.leftMesh.material) this.leftMesh.material.dispose();
+      this.leftMesh = null;
+    }
+    if (this.rightMesh) {
+      this.scene.remove(this.rightMesh);
+      if (this.rightMesh.geometry) this.rightMesh.geometry.dispose();
+      if (this.rightMesh.material) this.rightMesh.material.dispose();
+      this.rightMesh = null;
+    }
+
+    // Create a single shared VideoTexture so WebGL only uploads the video frame once per tick
+    // and both eyes remain strictly synchronized.
     if (!this.videoTexture) {
       this.videoTexture = new THREE.VideoTexture(this.videoElement);
       this.videoTexture.minFilter = THREE.LinearFilter;
       this.videoTexture.magFilter = THREE.LinearFilter;
       this.videoTexture.format = THREE.RGBAFormat;
+      this.videoTexture.generateMipmaps = false;
     }
-
-    if (this.leftMesh) this.scene.remove(this.leftMesh);
-    if (this.rightMesh) this.scene.remove(this.rightMesh);
 
     const mode = this.mode3D;
     const is2D = (mode === '2d' || mode === '2d_passthrough');
 
     if (is2D) {
       const geometry = new THREE.PlaneGeometry(4, 2.25);
-      const texture = this.videoTexture.clone();
-      texture.needsUpdate = true;
 
       // Check if original video source is SBS or TB format
       const videoTitle = (this.videoElement && this.videoElement.title) ? this.videoElement.title.toLowerCase() : '';
@@ -363,18 +375,13 @@ class XRVideoPlayer {
 
       if (isSourceSBS) {
         // Crop left eye half for clean single 2D flat viewing of 3D SBS video
-        texture.offset.set(0, 0);
-        texture.repeat.set(0.5, 1.0);
+        this.applyUVTransform(geometry, 0, 0.5, 0, 1.0);
       } else if (isSourceTB) {
         // Crop top eye half for clean single 2D flat viewing of 3D TB video
-        texture.offset.set(0, 0.5);
-        texture.repeat.set(1.0, 0.5);
-      } else {
-        texture.offset.set(0, 0);
-        texture.repeat.set(1.0, 1.0);
+        this.applyUVTransform(geometry, 0, 1.0, 0.5, 0.5);
       }
 
-      const material = new THREE.MeshBasicMaterial({ map: texture, side: THREE.DoubleSide });
+      const material = new THREE.MeshBasicMaterial({ map: this.videoTexture, side: THREE.DoubleSide });
       this.leftMesh = new THREE.Mesh(geometry, material);
       this.leftMesh.position.set(0, 1.6, -3);
       this.scene.add(this.leftMesh);
@@ -400,25 +407,17 @@ class XRVideoPlayer {
       geometryRight = new THREE.PlaneGeometry(4, 2.25, 32, 16);
     }
 
-    const textureLeft = this.videoTexture.clone();
-    const textureRight = this.videoTexture.clone();
-    textureLeft.needsUpdate = true;
-    textureRight.needsUpdate = true;
-
+    // Remap geometry UVs directly for each eye so both meshes share the exact same VideoTexture instance
     if (mode === '3d_sbs' || mode === '3d_180_sbs' || mode === '3d_360_sbs') {
-      textureLeft.offset.set(0, 0);
-      textureLeft.repeat.set(0.5, 1.0);
-      textureRight.offset.set(0.5, 0);
-      textureRight.repeat.set(0.5, 1.0);
+      this.applyUVTransform(geometryLeft, 0, 0.5, 0, 1.0);
+      this.applyUVTransform(geometryRight, 0.5, 0.5, 0, 1.0);
     } else if (mode === '3d_tb') {
-      textureLeft.offset.set(0, 0.5);
-      textureLeft.repeat.set(1.0, 0.5);
-      textureRight.offset.set(0, 0);
-      textureRight.repeat.set(1.0, 0.5);
+      this.applyUVTransform(geometryLeft, 0, 1.0, 0.5, 0.5);
+      this.applyUVTransform(geometryRight, 0, 1.0, 0, 0.5);
     }
 
-    const matLeft = new THREE.MeshBasicMaterial({ map: textureLeft, side: THREE.DoubleSide });
-    const matRight = new THREE.MeshBasicMaterial({ map: textureRight, side: THREE.DoubleSide });
+    const matLeft = new THREE.MeshBasicMaterial({ map: this.videoTexture, side: THREE.DoubleSide });
+    const matRight = new THREE.MeshBasicMaterial({ map: this.videoTexture, side: THREE.DoubleSide });
 
     this.leftMesh = new THREE.Mesh(geometryLeft, matLeft);
     this.rightMesh = new THREE.Mesh(geometryRight, matRight);
@@ -436,6 +435,17 @@ class XRVideoPlayer {
 
     this.scene.add(this.leftMesh);
     this.scene.add(this.rightMesh);
+  }
+
+  applyUVTransform(geometry, offsetX, repeatX, offsetY, repeatY) {
+    const uvAttr = geometry.attributes.uv;
+    if (!uvAttr) return;
+    for (let i = 0; i < uvAttr.count; i++) {
+      const u = uvAttr.getX(i);
+      const v = uvAttr.getY(i);
+      uvAttr.setXY(i, u * repeatX + offsetX, v * repeatY + offsetY);
+    }
+    uvAttr.needsUpdate = true;
   }
 
   // ------------------------------------------------------------------
@@ -1168,10 +1178,6 @@ class XRVideoPlayer {
   }
 
   renderVR(time, frame) {
-    if (this.videoTexture) {
-      this.videoTexture.needsUpdate = true;
-    }
-
     // Maintain stationary floor grid plane in 2D Flat Screen mode (without passthrough)
     if (this.mode3D === '2d' && this.floorMesh) {
       if (this.floorMesh.material) {
@@ -1185,9 +1191,12 @@ class XRVideoPlayer {
     // Update laser line trimming, reticle dot position, and haptics hover
     this.updateRaycastingAndHover();
 
-    // Continuously update VR HUD Canvas while HUD is visible & video playing so progress bar & timer advance smoothly
-    if (this.hudVisible && this.videoElement && !this.videoElement.paused) {
-      this.updateVRHUDCanvas();
+    // Throttle HUD canvas redraws when not actively scrubbing so we don't stall the GPU each XR frame
+    if (this.hudVisible && this.videoElement && !this.videoElement.paused && !this.isScrubbingSeekBar) {
+      if (!this.lastHudUpdateTime || (time - this.lastHudUpdateTime > 200)) {
+        this.lastHudUpdateTime = time;
+        this.updateVRHUDCanvas();
+      }
     }
 
     // Handle smooth dragging of HUD panel with active VR controller
@@ -1230,6 +1239,10 @@ class XRVideoPlayer {
     // Pause video playback on VR exit so the user returns to 2D web view paused at current position
     if (this.videoElement) {
       this.videoElement.pause();
+    }
+    if (this.videoTexture) {
+      this.videoTexture.dispose();
+      this.videoTexture = null;
     }
     if (this.floorMesh && this.scene) {
       this.scene.remove(this.floorMesh);
