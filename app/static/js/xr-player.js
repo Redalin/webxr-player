@@ -107,9 +107,10 @@ class XRVideoPlayer {
         this.onVRSessionEnd();
       });
 
-      // Show XR Canvas container
+      // Show XR Canvas container and pause 2D DOM video compositing while in VR
       const container = document.getElementById('xr-canvas-container');
       if (container) container.style.display = 'block';
+      if (this.videoElement) this.videoElement.style.visibility = 'hidden';
 
       this.setupStereoVideoScene();
       this.setupVRHUDPanel();
@@ -134,8 +135,12 @@ class XRVideoPlayer {
     this.camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 1000);
     this.scene.add(this.camera);
 
-    this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-    this.renderer.setPixelRatio(window.devicePixelRatio);
+    this.renderer = new THREE.WebGLRenderer({
+      antialias: false,
+      alpha: true,
+      powerPreference: 'high-performance'
+    });
+    this.renderer.setPixelRatio(1);
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     if (this.isPassthroughMode(this.mode3D)) {
       this.renderer.setClearColor(0x000000, 0);
@@ -352,21 +357,25 @@ class XRVideoPlayer {
       this.rightMesh = null;
     }
 
-    // Create a single shared VideoTexture so WebGL only uploads the video frame once per tick
-    // and both eyes remain strictly synchronized.
+    // Use a regular THREE.Texture instead of THREE.VideoTexture so we have strict manual control
+    // over when texImage2D uploads happen (only once per new decoded video frame, before eye passes).
     if (!this.videoTexture) {
-      this.videoTexture = new THREE.VideoTexture(this.videoElement);
+      this.videoTexture = new THREE.Texture(this.videoElement);
       this.videoTexture.minFilter = THREE.LinearFilter;
       this.videoTexture.magFilter = THREE.LinearFilter;
-      this.videoTexture.format = THREE.RGBAFormat;
+      this.videoTexture.format = THREE.RGBFormat;
       this.videoTexture.generateMipmaps = false;
+      this.lastVideoFrameTime = -1;
+      if (this.videoElement.readyState >= this.videoElement.HAVE_CURRENT_DATA) {
+        this.videoTexture.needsUpdate = true;
+      }
     }
 
     const mode = this.mode3D;
     const is2D = (mode === '2d' || mode === '2d_passthrough');
 
     if (is2D) {
-      const geometry = new THREE.PlaneGeometry(4, 2.25);
+      const geometry = new THREE.PlaneGeometry(4, 2.25, 1, 1);
 
       // Check if original video source is SBS or TB format
       const videoTitle = (this.videoElement && this.videoElement.title) ? this.videoElement.title.toLowerCase() : '';
@@ -381,7 +390,11 @@ class XRVideoPlayer {
         this.applyUVTransform(geometry, 0, 1.0, 0.5, 0.5);
       }
 
-      const material = new THREE.MeshBasicMaterial({ map: this.videoTexture, side: THREE.DoubleSide });
+      const material = new THREE.MeshBasicMaterial({
+        map: this.videoTexture,
+        side: THREE.FrontSide,
+        depthWrite: false
+      });
       this.leftMesh = new THREE.Mesh(geometry, material);
       this.leftMesh.position.set(0, 1.6, -3);
       this.scene.add(this.leftMesh);
@@ -403,11 +416,12 @@ class XRVideoPlayer {
       geometryLeft.rotateY(Math.PI);
       geometryRight = geometryLeft.clone();
     } else {
-      geometryLeft = new THREE.PlaneGeometry(4, 2.25, 32, 16);
-      geometryRight = new THREE.PlaneGeometry(4, 2.25, 32, 16);
+      // Single quad per eye (1x1 segments) with depthWrite disabled to prevent any diagonal triangle seam or z-fighting
+      geometryLeft = new THREE.PlaneGeometry(4, 2.25, 1, 1);
+      geometryRight = new THREE.PlaneGeometry(4, 2.25, 1, 1);
     }
 
-    // Remap geometry UVs directly for each eye so both meshes share the exact same VideoTexture instance
+    // Remap geometry UVs directly for each eye so both meshes share the exact same Texture instance
     if (mode === '3d_sbs' || mode === '3d_180_sbs' || mode === '3d_360_sbs') {
       this.applyUVTransform(geometryLeft, 0, 0.5, 0, 1.0);
       this.applyUVTransform(geometryRight, 0.5, 0.5, 0, 1.0);
@@ -416,11 +430,24 @@ class XRVideoPlayer {
       this.applyUVTransform(geometryRight, 0, 1.0, 0, 0.5);
     }
 
-    const matLeft = new THREE.MeshBasicMaterial({ map: this.videoTexture, side: THREE.DoubleSide });
-    const matRight = new THREE.MeshBasicMaterial({ map: this.videoTexture, side: THREE.DoubleSide });
+    const meshSide = (mode === '3d_180_sbs' || mode === '3d_360_sbs') ? THREE.DoubleSide : THREE.FrontSide;
+    const matLeft = new THREE.MeshBasicMaterial({
+      map: this.videoTexture,
+      side: meshSide,
+      depthWrite: false,
+      depthTest: false
+    });
+    const matRight = new THREE.MeshBasicMaterial({
+      map: this.videoTexture,
+      side: meshSide,
+      depthWrite: false,
+      depthTest: false
+    });
 
     this.leftMesh = new THREE.Mesh(geometryLeft, matLeft);
     this.rightMesh = new THREE.Mesh(geometryRight, matRight);
+    this.leftMesh.renderOrder = 1;
+    this.rightMesh.renderOrder = 1;
 
     if (mode !== '3d_180_sbs' && mode !== '3d_360_sbs') {
       this.leftMesh.position.set(0, 1.6, -3);
@@ -1178,6 +1205,24 @@ class XRVideoPlayer {
   }
 
   renderVR(time, frame) {
+    // Only trigger a WebGL texture upload when the video element has actually advanced to a new frame
+    if (this.videoTexture && this.videoElement && this.videoElement.readyState >= this.videoElement.HAVE_CURRENT_DATA) {
+      const currentVidTime = this.videoElement.currentTime;
+      if (currentVidTime !== this.lastVideoFrameTime) {
+        this.lastVideoFrameTime = currentVidTime;
+        this.videoTexture.needsUpdate = true;
+      }
+    }
+
+    // Ensure WebXR left/right eye cameras strictly isolate Layer 1 (left eye) and Layer 2 (right eye)
+    const xrCam = this.renderer.xr.getCamera(this.camera);
+    if (xrCam && xrCam.cameras && xrCam.cameras.length >= 2) {
+      xrCam.cameras[0].layers.enable(1);
+      xrCam.cameras[0].layers.disable(2);
+      xrCam.cameras[1].layers.enable(2);
+      xrCam.cameras[1].layers.disable(1);
+    }
+
     // Maintain stationary floor grid plane in 2D Flat Screen mode (without passthrough)
     if (this.mode3D === '2d' && this.floorMesh) {
       if (this.floorMesh.material) {
@@ -1238,6 +1283,7 @@ class XRVideoPlayer {
     }
     // Pause video playback on VR exit so the user returns to 2D web view paused at current position
     if (this.videoElement) {
+      this.videoElement.style.visibility = 'visible';
       this.videoElement.pause();
     }
     if (this.videoTexture) {
