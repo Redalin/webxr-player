@@ -29,6 +29,7 @@ body {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
+  overflow-x: hidden;
 }
 
 /* Header & Navbar */
@@ -207,6 +208,7 @@ body {
   margin: 0 auto;
   padding: 1.5rem 2rem;
   width: 100%;
+  min-width: 0;
   flex: 1;
 }
 
@@ -251,6 +253,13 @@ body {
   align-items: center;
   gap: 0.25rem;
   line-height: 1.2;
+}
+
+.breadcrumb-segment span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
 }
 
 .breadcrumb-segment:hover {
@@ -422,8 +431,10 @@ body {
 /* Media & Video Grid */
 .video-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(var(--thumb-card-width, 300px), 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, var(--thumb-card-width, 300px)), 1fr));
   gap: 1.5rem;
+  width: 100%;
+  max-width: 100%;
 }
 
 .badge-img {
@@ -444,6 +455,9 @@ body {
   transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.2s ease;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
   backdrop-filter: blur(8px);
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
 }
 .folder-card:hover {
   transform: translateY(-4px);
@@ -457,6 +471,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
+  flex-shrink: 0;
 }
 .folder-info {
   display: flex;
@@ -464,6 +479,7 @@ body {
   gap: 0.25rem;
   overflow: hidden;
   flex: 1;
+  min-width: 0;
 }
 .folder-title {
   font-size: 1rem;
@@ -472,6 +488,8 @@ body {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  max-width: 100%;
+  display: block;
 }
 .folder-badge {
   font-size: 0.75rem;
@@ -479,6 +497,11 @@ body {
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+  display: block;
 }
 .parent-folder-card {
   border-style: dashed;
@@ -497,7 +520,8 @@ body {
   flex-direction: column;
   transition: transform 0.25s ease, box-shadow 0.25s ease;
   cursor: pointer;
-
+  min-width: 0;
+  max-width: 100%;
 }
 .video-card:hover {
   transform: translateY(-4px);
@@ -592,6 +616,8 @@ body {
   flex-direction: column;
   gap: 0.5rem;
   flex: 1;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .video-title {
@@ -1115,7 +1141,7 @@ body {
   }
 
   .video-grid {
-    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr));
     gap: 1rem;
   }
 
@@ -1168,7 +1194,16 @@ body {
   }
 
   .video-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .folder-card {
+    padding: 1rem;
+    gap: 0.85rem;
+  }
+
+  .breadcrumb-segment {
+    max-width: 140px;
   }
 
   .breadcrumb code {
