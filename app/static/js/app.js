@@ -504,14 +504,40 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // Player Events
+  let lastTouchTime = 0;
+  let controlsVisibleAtTouchStart = false;
+  function isMobileView() {
+    return window.innerWidth <= 900 ||
+      window.matchMedia('(max-width: 900px), (pointer: coarse)').matches ||
+      (Date.now() - lastTouchTime < 1000);
+  }
+
   if (btnClosePlayer) {
     btnClosePlayer.addEventListener('click', closePlayerModal);
   }
   if (playerModal) {
     playerModal.addEventListener('click', (e) => {
+      if (e.target.closest('#btn-close-player') || e.target.closest('#overlay-btn-exit-video')) {
+        return;
+      }
+      if (isMobileView()) {
+        showOverlayBar();
+        return;
+      }
       if (e.target === playerModal) closePlayerModal();
     });
   }
+
+  // Ensure touching anywhere on the screen while the video player is open brings up controls
+  document.addEventListener('touchstart', (e) => {
+    lastTouchTime = Date.now();
+    if (!window.isPlayerModalOpen()) return;
+    controlsVisibleAtTouchStart = fullscreenOverlayBar ? !fullscreenOverlayBar.classList.contains('fade-out') : false;
+    if (e.target.closest('#btn-close-player') || e.target.closest('#overlay-btn-exit-video')) {
+      return;
+    }
+    showOverlayBar();
+  }, { passive: true });
 
   // WebXR Launch
   if (btnEnterWebXR) {
@@ -553,7 +579,24 @@ document.addEventListener('DOMContentLoaded', () => {
     videoWrapper.addEventListener('click', (e) => {
       // If click was inside overlay control bar controls, don't toggle
       if (e.target.closest('.overlay-control-bar')) return;
-      
+
+      const isTouch = (Date.now() - lastTouchTime < 1000);
+      const controlsWereVisible = isTouch
+        ? controlsVisibleAtTouchStart
+        : (fullscreenOverlayBar && !fullscreenOverlayBar.classList.contains('fade-out'));
+
+      if (isMobileView()) {
+        if (controlsWereVisible && webVideoElement) {
+          if (webVideoElement.paused) {
+            webVideoElement.play();
+          } else {
+            webVideoElement.pause();
+          }
+        }
+        showOverlayBar();
+        return;
+      }
+
       if (fullscreenOverlayBar && fullscreenOverlayBar.classList.contains('fade-out')) {
         showOverlayBar();
       } else {
@@ -562,7 +605,9 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     videoWrapper.addEventListener('mousemove', () => {
-      showOverlayBar();
+      if (!isMobileView()) {
+        showOverlayBar();
+      }
     });
   }
 
