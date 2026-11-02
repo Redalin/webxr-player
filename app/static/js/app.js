@@ -1441,6 +1441,13 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function closePlayerModal() {
+    if (document.fullscreenElement || document.webkitFullscreenElement) {
+      if (document.exitFullscreen) {
+        document.exitFullscreen().catch(() => {});
+      } else if (document.webkitExitFullscreen) {
+        document.webkitExitFullscreen().catch(() => {});
+      }
+    }
     webVideoElement.pause();
     webVideoElement.src = '';
     playerModal.classList.remove('active');
